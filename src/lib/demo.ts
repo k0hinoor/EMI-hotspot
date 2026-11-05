@@ -223,3 +223,200 @@ export function demoTick(spec: FieldSpec, state: DemoStreamState): { line: strin
 export const DEMO_HELLO =
   `#HELLO {"device_id":"${DEMO_DEVICE_ID}","firmware_version":"demo-1.0.0","protocol_version":1,` +
   `"probe_type":"E_FIELD","sample_rate_hz":20}`
+
+/* -------------------------------------------------------------------------- */
+/*  Demo machine view (camera + reconstruction)                                */
+/* -------------------------------------------------------------------------- */
+
+/** Marker device id carried by the demo camera feed. */
+export const DEMO_CAMERA_DEVICE = 'DEMO-CAM-01'
+
+interface SchematicPart {
+  ref: string
+  x: number
+  y: number
+  w: number
+  h: number
+  /** Silkscreen pad colour. */
+  tone: string
+}
+
+/**
+ * A deterministic board schematic used as the demo camera frame: copper traces,
+ * pads, an IC and silkscreen text drawn into a canvas. It is stamped with the
+ * DEMO label so a screenshot of it can never pass for real hardware.
+ */
+function schematicFor(scanWidthMm: number, scanHeightMm: number) {
+  const parts: SchematicPart[] = []
+  const rand = mulberry32(424242)
+  const cols = 5
+  const rows = 3
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (rand() < 0.22) continue
+      parts.push({
+        ref: `U${r * cols + c + 1}`,
+        x: 0.12 + (c / cols) * 0.76 + rand() * 0.03,
+        y: 0.14 + (r / rows) * 0.66 + rand() * 0.03,
+        w: 0.05 + rand() * 0.07,
+        h: 0.05 + rand() * 0.05,
+        tone: rand() > 0.72 ? '#c9a24a' : '#93a0b8',
+      })
+    }
+  }
+  return { parts, aspect: scanWidthMm / Math.max(1, scanHeightMm) }
+}
+
+/**
+ * Paints the demo camera frame. `t` is seconds since the feed started, used for
+ * the gentle position drift that makes the "camera" feel hand-held.
+ */
+export function paintDemoFrame(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  options: { widthMm: number; heightMm: number; t: number; seed?: number },
+): void {
+  const { widthMm, heightMm, t } = options
+  const rand = mulberry32(options.seed ?? 90210)
+  const { parts, aspect } = schematicFor(widthMm, heightMm)
+
+  // Workbench background.
+  const bg = ctx.createRadialGradient(width * 0.5, height * 0.42, 10, width * 0.5, height * 0.5, width * 0.75)
+  bg.addColorStop(0, '#1b2130')
+  bg.addColorStop(1, '#0a0d14')
+  ctx.fillStyle = bg
+  ctx.fillRect(0, 0, width, height)
+
+  // Hand-held drift: the board sits slightly off-centre and moves a little.
+  const driftX = Math.sin(t * 0.6) * width * 0.006
+  const driftY = Math.cos(t * 0.45) * height * 0.005
+  const boardW = width * 0.82
+  const boardH = Math.min(height * 0.78, boardW / aspect)
+  const bx = (width - boardW) / 2 + driftX
+  const by = (height - boardH) / 2 + driftY
+
+  // PCB substrate.
+  ctx.save()
+  ctx.shadowColor = 'rgba(0,0,0,0.65)'
+  ctx.shadowBlur = 26
+  ctx.shadowOffsetY = 10
+  const pcb = ctx.createLinearGradient(bx, by, bx + boardW, by + boardH)
+  pcb.addColorStop(0, '#14432f')
+  pcb.addColorStop(0.55, '#0f3b2a')
+  pcb.addColorStop(1, '#0b2e21')
+  ctx.fillStyle = pcb
+  ctx.beginPath()
+  ctx.roundRect?.(bx, by, boardW, boardH, 6)
+  if (typeof ctx.roundRect !== 'function') ctx.rect(bx, by, boardW, boardH)
+  ctx.fill()
+  ctx.restore()
+
+  // Mounting holes.
+  ctx.fillStyle = '#0a1912'
+  const holeR = Math.min(boardW, boardH) * 0.022
+  for (const [hx, hy] of [
+    [bx + boardW * 0.05, by + boardH * 0.08],
+    [bx + boardW * 0.95, by + boardH * 0.08],
+    [bx + boardW * 0.05, by + boardH * 0.92],
+    [bx + boardW * 0.95, by + boardH * 0.92],
+  ]) {
+    ctx.beginPath()
+    ctx.arc(hx, hy, holeR, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(201, 162, 74, 0.55)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+  }
+
+  // Copper traces.
+  ctx.strokeStyle = 'rgba(196, 154, 66, 0.42)'
+  ctx.lineWidth = Math.max(1, boardW * 0.0022)
+  for (let i = 0; i < 26; i++) {
+    const y = by + boardH * (0.1 + rand() * 0.8)
+    const x0 = bx + boardW * (0.08 + rand() * 0.3)
+    const x1 = bx + boardW * (0.6 + rand() * 0.32)
+    const bend = by + boardH * (0.1 + rand() * 0.8)
+    ctx.beginPath()
+    ctx.moveTo(x0, y)
+    ctx.lineTo((x0 + x1) / 2, y)
+    ctx.lineTo((x0 + x1) / 2, bend)
+    ctx.lineTo(x1, bend)
+    ctx.stroke()
+  }
+
+  // Components.
+  for (const part of parts) {
+    const px = bx + part.x * boardW
+    const py = by + part.y * boardH
+    const pw = part.w * boardW
+    const ph = part.h * boardH
+    ctx.fillStyle = 'rgba(12, 16, 22, 0.92)'
+    ctx.fillRect(px, py, pw, ph)
+    ctx.strokeStyle = part.tone
+    ctx.lineWidth = 1
+    ctx.strokeRect(px, py, pw, ph)
+    // Pins.
+    ctx.fillStyle = 'rgba(214, 222, 235, 0.75)'
+    const pins = Math.max(2, Math.round(pw / 7))
+    for (let i = 0; i < pins; i++) {
+      const t = (i + 0.5) / pins
+      ctx.fillRect(px + t * pw - 1, py - 2, 2, 2)
+      ctx.fillRect(px + t * pw - 1, py + ph, 2, 2)
+    }
+  }
+
+  // Main IC with a pin-1 dot.
+  const icW = boardW * 0.17
+  const icH = boardH * 0.2
+  const icX = bx + boardW * 0.4
+  const icY = by + boardH * 0.38
+  ctx.fillStyle = '#0d1119'
+  ctx.fillRect(icX, icY, icW, icH)
+  ctx.strokeStyle = 'rgba(170, 182, 200, 0.75)'
+  ctx.strokeRect(icX, icY, icW, icH)
+  ctx.fillStyle = 'rgba(214, 222, 235, 0.7)'
+  for (let i = 0; i < 8; i++) {
+    const y = icY + ((i + 0.5) / 8) * icH
+    ctx.fillRect(icX - 3, y - 1, 3, 2)
+    ctx.fillRect(icX + icW, y - 1, 3, 2)
+  }
+  ctx.beginPath()
+  ctx.arc(icX + 4, icY + 4, 1.8, 0, Math.PI * 2)
+  ctx.fillStyle = '#c9a24a'
+  ctx.fill()
+
+  // Silkscreen.
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.55)'
+  ctx.font = `600 ${Math.max(7, boardW * 0.017)}px ui-sans-serif, system-ui, sans-serif`
+  ctx.fillText('EMI TEST DUT', bx + boardW * 0.06, by + boardH * 0.96)
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.32)'
+  ctx.fillText(`${widthMm} × ${heightMm} mm`, bx + boardW * 0.06, by + boardH * 0.06)
+
+  // Camera artefacts: vignette, sensor noise, DEMO stamp.
+  const vig = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.28, width / 2, height / 2, width * 0.72)
+  vig.addColorStop(0, 'rgba(0,0,0,0)')
+  vig.addColorStop(1, 'rgba(0,0,0,0.55)')
+  ctx.fillStyle = vig
+  ctx.fillRect(0, 0, width, height)
+
+  const noise = mulberry32(Math.floor(t * 12) + 7)
+  ctx.fillStyle = 'rgba(255,255,255,0.05)'
+  for (let i = 0; i < 900; i++) {
+    ctx.fillRect(noise() * width, noise() * height, 1, 1)
+  }
+
+  ctx.fillStyle = 'rgba(4, 8, 12, 0.62)'
+  const stampW = Math.max(96, width * 0.19)
+  ctx.fillRect(width - stampW - 12, 12, stampW, 20)
+  ctx.strokeStyle = 'rgba(247, 168, 75, 0.75)'
+  ctx.lineWidth = 1
+  ctx.strokeRect(width - stampW - 12, 12, stampW, 20)
+  ctx.fillStyle = '#f7a84b'
+  ctx.font = `700 ${Math.max(8, width * 0.012)}px ui-sans-serif, system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('DEMO CAMERA FEED', width - stampW / 2 - 12, 22)
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+}

@@ -137,6 +137,23 @@ export interface Sample {
   protocol_version: number | null
 }
 
+/**
+ * One frame of the machine-vision feed. Only ever produced by the camera module
+ * (or, in Demo Mode, by the synthetic feed pushed through the same code path).
+ */
+export interface FrameCapture {
+  capture_id: string
+  /** PNG data URL — kept in memory only, never persisted. */
+  data_url: string
+  width: number
+  height: number
+  /** Wall-clock time the frame was grabbed from the stream. */
+  at: string
+  /** Device id of the source, or `DEMO-CAM-01` for the demo feed. */
+  source: string
+  is_demo?: boolean
+}
+
 export interface LogEntry {
   id: string
   at: string

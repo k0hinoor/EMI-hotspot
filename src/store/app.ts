@@ -18,6 +18,7 @@ import {
 import { defaultProbes, defaultSettings } from '../lib/defaults'
 import {
   buildDemoScan,
+  DEMO_CAMERA_DEVICE,
   DEMO_DEVICE_ID,
   demoFieldAt,
   DEMO_HELLO,
@@ -26,10 +27,23 @@ import {
   H_FIELD,
   type DemoStreamState,
 } from '../lib/demo'
+import {
+  captureCanvasFrame,
+  captureFrame as captureFrameFromVideo,
+  describeCameraError,
+  describeTrack,
+  listCameras,
+  openCamera,
+  stopStream,
+  type CameraDevice,
+  type CameraStatus,
+  type TrackInfo,
+} from '../lib/camera'
 import { storage } from '../lib/storage'
 import { uid } from '../lib/derive'
 import type {
   AppSettings,
+  FrameCapture,
   CalibrationProfile,
   DeviceRecord,
   DeviceState,
@@ -125,12 +139,43 @@ interface AppState {
   selectedCell: { col: number; row: number } | null
   activeScanId: string | null
 
+  /* ---------- machine vision (camera) ---------- */
+  cameraStatus: CameraStatus
+  cameraError: string | null
+  cameraDevices: CameraDevice[]
+  cameraDeviceId: string | null
+  /** True when the live stream comes from the synthetic demo canvas. */
+  cameraIsDemo: boolean
+  cameraStream: MediaStream | null
+  cameraInfo: TrackInfo
+  cameraFps: number
+  /** Grabbed stills for the current session (memory only). */
+  cameraCaptures: FrameCapture[]
+  cameraOverlay: 'SURFACE' | 'OFF'
+  cameraCrop: 'BOARD' | 'FULL'
+  cameraNotice: string | null
+
   /* ---------- demo mode (PRD §12.7) ---------- */
   demoMode: boolean
   demoStreaming: boolean
   enterDemoMode: () => Promise<void>
   exitDemoMode: () => Promise<void>
   toggleDemoStream: () => void
+
+  /* ---------- camera actions ---------- */
+  refreshCameras: () => Promise<void>
+  startCamera: (deviceId?: string | null) => Promise<void>
+  /** Attaches an already-open stream (camera or the demo canvas feed). */
+  attachCameraStream: (stream: MediaStream, source: 'CAMERA' | 'DEMO') => void
+  stopCamera: () => void
+  selectCamera: (deviceId: string | null) => void
+  captureFrameNow: (source: HTMLVideoElement | HTMLCanvasElement) => FrameCapture | null
+  deleteCapture: (id: string) => void
+  clearCaptures: () => void
+  setCameraOverlay: (mode: 'SURFACE' | 'OFF') => void
+  setCameraCrop: (mode: 'BOARD' | 'FULL') => void
+  setCameraFps: (fps: number) => void
+  setCameraNotice: (notice: string | null) => void
 
   /* ---------- actions ---------- */
   hydrate: () => Promise<void>
@@ -171,6 +216,8 @@ interface AppState {
 }
 
 let transport: Transport | null = null
+/** The open camera stream, kept outside the store so a re-render never clones it. */
+let cameraStreamHandle: MediaStream | null = null
 let demoTimer: number | null = null
 let demoState: DemoStreamState = { seq: 1, phase: 0 }
 let staleTimer: number | null = null
@@ -206,6 +253,13 @@ function startDemoStream() {
     demoState = next
     feed(line)
   }, 420)
+}
+
+/** Releases the open camera stream (camera LEDs go out). */
+function stopCameraHandle() {
+  if (!cameraStreamHandle) return
+  stopStream(cameraStreamHandle)
+  cameraStreamHandle = null
 }
 
 function stopDemoStream() {
@@ -475,6 +529,26 @@ export const useApp = create<AppState>()((set, get) => {
     toasts: [],
     selectedCell: null,
     activeScanId: null,
+
+    cameraStatus: 'IDLE',
+    cameraError: null,
+    cameraDevices: [],
+    cameraDeviceId: null,
+    cameraIsDemo: false,
+    cameraStream: null,
+    cameraInfo: {
+      width: null,
+      height: null,
+      frameRate: null,
+      deviceId: null,
+      facingMode: null,
+      synthetic: false,
+    },
+    cameraFps: 0,
+    cameraCaptures: [],
+    cameraOverlay: 'SURFACE',
+    cameraCrop: 'BOARD',
+    cameraNotice: null,
 
     demoMode: false,
     demoStreaming: false,
@@ -906,14 +980,21 @@ export const useApp = create<AppState>()((set, get) => {
         }),
       }))
       startDemoStream()
+      // A real camera stream is hardware: release it so the demo feed is the only
+      // thing on screen and no live picture is mistaken for demo content.
+      if (get().cameraStatus === 'LIVE' && !get().cameraIsDemo) get().stopCamera()
+      set({ cameraNotice: 'Demo Mode — camera feed is synthetic.' })
       get().notify('warn', 'Demo Mode enabled', 'Values are synthetic. Nothing here came from the detector.')
     },
 
     async exitDemoMode() {
       stopDemoStream()
+      if (get().cameraIsDemo) get().stopCamera()
       set((s) => ({
         demoMode: false,
         demoStreaming: false,
+        cameraCaptures: s.cameraCaptures.filter((c) => !c.is_demo),
+        cameraNotice: null,
         scans: s.scans.filter((x) => !x.is_demo),
         measurements: s.measurements.filter((x) => !x.is_demo),
         activeScanId: s.scans.find((x) => !x.is_demo)?.scan_id ?? null,
@@ -943,6 +1024,150 @@ export const useApp = create<AppState>()((set, get) => {
       set({ demoStreaming: next })
       if (next) startDemoStream()
       else stopDemoStream()
+    },
+
+    /* ---------------------------- camera ---------------------------- */
+
+    async refreshCameras() {
+      const devices = await listCameras()
+      set({ cameraDevices: devices })
+      // An empty list after a successful enumeration genuinely means no camera.
+      if (devices.length === 0 && get().cameraStatus === 'IDLE') {
+        set({
+          cameraStatus: 'NO_DEVICE',
+          cameraError: 'No camera detected. Attach a camera and select “Rescan”.',
+        })
+      }
+    },
+
+    async startCamera(deviceId) {
+      const target = deviceId ?? get().cameraDeviceId
+      set({ cameraStatus: 'REQUESTING', cameraError: null, cameraNotice: null })
+      try {
+        const stream = await openCamera(target)
+        get().attachCameraStream(stream, 'CAMERA')
+        // Labels are only readable after a grant, so enumerate again.
+        void get().refreshCameras()
+      } catch (error) {
+        const { status, message } = describeCameraError(error)
+        stopCameraHandle()
+        set((s) => ({
+          cameraStatus: status,
+          cameraError: message,
+          cameraStream: null,
+          cameraIsDemo: false,
+          cameraFps: 0,
+          cameraInfo: { ...s.cameraInfo, synthetic: false },
+          log: pushLog(s.log, { direction: 'ERR', text: `Camera: ${message}` }),
+        }))
+      }
+    },
+
+    attachCameraStream(stream, source) {
+      stopCameraHandle()
+      cameraStreamHandle = stream
+      const track = stream.getVideoTracks()[0]
+      const settings = track?.getSettings?.() ?? {}
+      set((s) => ({
+        cameraStream: stream,
+        cameraIsDemo: source === 'DEMO',
+        cameraStatus: 'LIVE',
+        cameraError: null,
+        cameraDeviceId: source === 'DEMO' ? DEMO_CAMERA_DEVICE : (settings.deviceId ?? s.cameraDeviceId),
+        cameraInfo: describeTrack(stream, source === 'DEMO'),
+        cameraFps: 0,
+        log: pushLog(s.log, {
+          direction: source === 'DEMO' ? 'SYS' : 'IN',
+          text:
+            source === 'DEMO'
+              ? 'Camera: demo feed attached (synthetic machine view — not a real camera).'
+              : `Camera: stream open ${settings.width ?? '?'}×${settings.height ?? '?'} @ ${Math.round(settings.frameRate ?? 0)} fps`,
+        }),
+      }))
+      // If the operator unplugs the camera, say so instead of freezing silently.
+      track?.addEventListener?.('ended', () => {
+        if (cameraStreamHandle !== stream) return
+        stopCameraHandle()
+        set({
+          cameraStatus: 'NO_DEVICE',
+          cameraError: 'The camera stream ended. The device was unplugged or released.',
+          cameraStream: null,
+          cameraIsDemo: false,
+          cameraFps: 0,
+        })
+      })
+    },
+
+    stopCamera() {
+      stopCameraHandle()
+      set((s) => ({
+        cameraStream: null,
+        cameraStatus: 'IDLE',
+        cameraIsDemo: false,
+        cameraFps: 0,
+        cameraNotice: null,
+        cameraInfo: { ...s.cameraInfo, synthetic: false },
+        log: pushLog(s.log, { direction: 'SYS', text: 'Camera: stream released.' }),
+      }))
+    },
+
+    selectCamera(deviceId) {
+      set({ cameraDeviceId: deviceId })
+      void get().startCamera(deviceId)
+    },
+
+    captureFrameNow(source) {
+      const frame =
+        source instanceof HTMLVideoElement
+          ? captureFrameFromVideo(source)
+          : captureCanvasFrame(source)
+      if (!frame) {
+        get().notify('warn', 'No frame to grab', 'The camera has not delivered a picture yet.')
+        return null
+      }
+      const state = get()
+      const capture: FrameCapture = {
+        capture_id: uid('CAP'),
+        // Copy explicitly: the store must never alias a getter from the element.
+        data_url: String(frame.dataUrl ?? ''),
+        width: frame.width,
+        height: frame.height,
+        at: frame.at,
+        source: state.cameraIsDemo ? DEMO_CAMERA_DEVICE : (state.cameraInfo.deviceId ?? 'camera'),
+        is_demo: state.cameraIsDemo || undefined,
+      }
+      set((s) => ({
+        cameraCaptures: [capture, ...s.cameraCaptures].slice(0, 12),
+        log: pushLog(s.log, {
+          direction: 'SYS',
+          text: `Camera: frame captured ${frame.width}×${frame.height}${state.cameraIsDemo ? ' (demo feed)' : ''}`,
+        }),
+      }))
+      return capture
+    },
+
+    deleteCapture(id) {
+      set((s) => ({ cameraCaptures: s.cameraCaptures.filter((c) => c.capture_id !== id) }))
+    },
+
+    clearCaptures() {
+      set({ cameraCaptures: [] })
+    },
+
+    setCameraOverlay(mode) {
+      set({ cameraOverlay: mode })
+    },
+
+    setCameraCrop(mode) {
+      set({ cameraCrop: mode })
+    },
+
+    setCameraFps(fps) {
+      set({ cameraFps: fps })
+    },
+
+    setCameraNotice(notice) {
+      set({ cameraNotice: notice })
     },
 
     notify(tone, title, detail) {

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Activity,
   ArrowUpRight,
+  Camera,
   CircleAlert,
   CircleDot,
   Grid3x3,
@@ -120,6 +121,9 @@ export function Dashboard() {
             scan ? (
               <>
                 <Badge tone={scan.probe_type === 'E_FIELD' ? 'efield' : 'hfield'}>{probeLabel(scan.probe_type)}</Badge>
+                <Link to="/camera" className="panel-link inline-flex items-center gap-0.5" title="Live camera view of the machine">
+                  <Camera size={10} /> Camera
+                </Link>
                 <Link to="/heatmap" className="panel-link inline-flex items-center gap-0.5">
                   Open heatmap <ArrowUpRight size={10} />
                 </Link>

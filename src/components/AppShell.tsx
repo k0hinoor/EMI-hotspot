@@ -10,6 +10,7 @@ import {
   FlaskConical,
   Grid3x3,
   LayoutDashboard,
+  Camera,
   Plug,
   ScanLine,
   Settings as SettingsIcon,
@@ -28,17 +29,19 @@ export const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, key: '1' },
   { to: '/live', label: 'Live Scan', icon: Activity, key: '2' },
   { to: '/heatmap', label: 'Heatmaps', icon: Grid3x3, key: '3' },
-  { to: '/analysis', label: 'Analytics', icon: ChartLine, key: '4' },
-  { to: '/data-log', label: 'Data Log', icon: Table2, key: '5' },
-  { to: '/reports', label: 'Reports', icon: FileText, key: '6' },
-  { to: '/calibration', label: 'Calibration', icon: FlaskConical, key: '7' },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon, key: '8' },
+  { to: '/camera', label: 'Machine Vision', icon: Camera, key: '4' },
+  { to: '/analysis', label: 'Analytics', icon: ChartLine, key: '5' },
+  { to: '/data-log', label: 'Data Log', icon: Table2, key: '6' },
+  { to: '/reports', label: 'Reports', icon: FileText, key: '7' },
+  { to: '/calibration', label: 'Calibration', icon: FlaskConical, key: '8' },
+  { to: '/settings', label: 'Settings', icon: SettingsIcon, key: '9' },
 ] as const
 
 export const PAGE_META: Record<string, { title: string; hint: string }> = {
   '/': { title: 'Dashboard', hint: 'Session overview · live signal, topology and activity' },
   '/live': { title: 'Live Scan', hint: 'Monitor the detector · capture readings at coordinates' },
   '/heatmap': { title: 'Heatmaps', hint: 'Manual grid mapping of relative signal activity' },
+  '/camera': { title: 'Machine Vision', hint: 'Live camera view of the machine · 3D reconstruction from the frame' },
   '/analysis': { title: 'Analytics', hint: 'Distribution, stability and per-scan statistics' },
   '/data-log': { title: 'Data Log', hint: 'Every stored measurement with full provenance' },
   '/reports': { title: 'Reports', hint: 'Reproducible scan summaries · PDF and CSV' },
@@ -50,6 +53,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const session = useApp((s) => s.session)
   const deviceState = useApp((s) => s.deviceState)
   const measurementCount = useApp((s) => s.measurements.length)
+  const cameraLive = useApp((s) => s.cameraStatus === 'LIVE')
 
   return (
     <div className="flex h-full flex-col">
@@ -93,6 +97,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                     <span className="flex-1 truncate">{item.label}</span>
                     {item.to === '/data-log' && measurementCount > 0 ? (
                       <span className="tabular text-[9.5px] text-ink-dim">{measurementCount}</span>
+                    ) : null}
+                    {item.to === '/camera' && cameraLive ? (
+                      <span className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-strong shadow-[0_0_8px_2px_rgba(255,111,139,0.5)]" />
                     ) : null}
                   </>
                 )}

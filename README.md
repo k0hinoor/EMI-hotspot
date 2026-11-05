@@ -28,6 +28,25 @@ All synthetic values come from a single module, [`src/lib/demo.ts`](./src/lib/de
 through the **real** frame handler (`#HELLO` / `#DATA`), so heatmap, topology surface, quality donut,
 statistics, log and reports exercise exactly the code paths the hardware uses.
 
+## Machine Vision — camera + 3D reconstruction
+
+The **Machine Vision** frame (key `4`) puts the machine itself on screen:
+
+- **Live camera** — the real browser `MediaDevices` stream of your webcam / PCB camera.
+  Nothing is simulated. With no camera (or permission refused) the viewfinder stays **black** and
+  states the reason — *no camera detected*, *permission refused*, *in use by another app* — with a
+  **Use camera** button. It never shows a placeholder picture.
+- **3D reconstruction** — the camera frame is used as the **texture** of a 3D board plane sized from
+  the active scan (mm). Measured EMI readings are interpolated into a sheet and draped over it, so you
+  can see the field sitting on the actual board. Drag to orbit, wheel to zoom, and switch the overlay
+  off to inspect the DUT alone. Texture can be the centred board crop or the full frame.
+- **Provenance** — resolution, delivered fps, device id and capture count come from the track itself.
+  Captured stills stay in memory for the session (never persisted), exportable as PNG.
+
+Camera access needs a secure origin (`https` or `localhost`) and explicit permission. In **Demo Mode**
+the camera is *not* opened: the panel shows a clearly stamped `DEMO CAMERA FEED` painted by
+`src/lib/demo.ts`, so a synthetic picture can never be mistaken for your bench.
+
 ## Run it
 
 ```bash
