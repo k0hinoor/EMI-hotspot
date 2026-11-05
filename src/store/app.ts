@@ -30,6 +30,7 @@ import {
 import {
   captureCanvasFrame,
   captureFrame as captureFrameFromVideo,
+  captureImageFrame,
   describeCameraError,
   describeTrack,
   listCameras,
@@ -39,10 +40,24 @@ import {
   type CameraStatus,
   type TrackInfo,
 } from '../lib/camera'
+import {
+  ESP32_DEFAULT,
+  Esp32WebSocketClient,
+  FrameRateMeter,
+  StallWatchdog,
+  bytesToDataUrl,
+  consumeMjpeg,
+  esp32Url,
+  jpegSize,
+  validateEsp32Config,
+  type Esp32Config,
+} from '../lib/esp32cam'
 import { storage } from '../lib/storage'
 import { uid } from '../lib/derive'
 import type {
   AppSettings,
+  Esp32Frame,
+  Esp32LinkState,
   FrameCapture,
   CalibrationProfile,
   DeviceRecord,
@@ -70,6 +85,7 @@ export const STORAGE_KEYS = {
   measurements: 'emi.measurements.v1',
   reports: 'emi.reports.v1',
   sessions: 'emi.device-sessions.v1',
+  esp32: 'emi.esp32.v1',
 } as const
 
 export interface Toast {
@@ -139,6 +155,19 @@ interface AppState {
   selectedCell: { col: number; row: number } | null
   activeScanId: string | null
 
+  /* ---------- ESP32-CAM link (the machine-vision source) ---------- */
+  esp32Config: Esp32Config
+  esp32Link: Esp32LinkState
+  esp32Error: string | null
+  /** The last frame the module delivered, already decoded. */
+  esp32Frame: Esp32Frame | null
+  /** Frame history for the rate/jitter panels — memory only. */
+  esp32History: { at: string; bytes: number; fps: number; signal_raw: number | null }[]
+  esp32Frames: number
+  esp32Dropped: number
+  /** Camera settings the module reported in its meta line. */
+  esp32Meta: Record<string, string | number | boolean>
+
   /* ---------- machine vision (camera) ---------- */
   cameraStatus: CameraStatus
   cameraError: string | null
@@ -162,6 +191,13 @@ interface AppState {
   exitDemoMode: () => Promise<void>
   toggleDemoStream: () => void
 
+  /* ---------- ESP32-CAM actions ---------- */
+  updateEsp32Config: (patch: Partial<Esp32Config>) => void
+  connectEsp32: () => Promise<void>
+  disconnectEsp32: () => void
+  /** 'DEMO' draws the synthetic board through the same frame pipeline. */
+  esp32IngestDemoFrame: (jpeg: Uint8Array, meta: Record<string, string | number | boolean>) => void
+
   /* ---------- camera actions ---------- */
   refreshCameras: () => Promise<void>
   startCamera: (deviceId?: string | null) => Promise<void>
@@ -169,7 +205,8 @@ interface AppState {
   attachCameraStream: (stream: MediaStream, source: 'CAMERA' | 'DEMO') => void
   stopCamera: () => void
   selectCamera: (deviceId: string | null) => void
-  captureFrameNow: (source: HTMLVideoElement | HTMLCanvasElement) => FrameCapture | null
+  captureFrameNow: (source: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement) => FrameCapture | null
+  captureEsp32FrameNow: () => FrameCapture | null
   deleteCapture: (id: string) => void
   clearCaptures: () => void
   setCameraOverlay: (mode: 'SURFACE' | 'OFF') => void
@@ -218,6 +255,11 @@ interface AppState {
 let transport: Transport | null = null
 /** The open camera stream, kept outside the store so a re-render never clones it. */
 let cameraStreamHandle: MediaStream | null = null
+/** Live ESP32-CAM client (WebSocket) and MJPEG abort handle. */
+let esp32Client: Esp32WebSocketClient | null = null
+let esp32Abort: AbortController | null = null
+let esp32Meter = new FrameRateMeter(3)
+let esp32Watchdog: StallWatchdog | null = null
 let demoTimer: number | null = null
 let demoState: DemoStreamState = { seq: 1, phase: 0 }
 let staleTimer: number | null = null
@@ -309,6 +351,58 @@ export const useApp = create<AppState>()((set, get) => {
         set({ signalState: 'STALE', signalNote: `No frame received for ${Math.round(ms / 1000)} s` })
       }
     }, ms)
+  }
+
+  /**
+   * Records one ESP32-CAM frame: picture, size, arrival rate and the detector
+   * reading that was live when it landed. Nothing here estimates anything — the
+   * fields come from the module's meta line or are left null.
+   */
+  function ingestEsp32Frame(frame: {
+    dataUrl: string
+    width: number
+    height: number
+    bytes: number
+    seq: number | null
+    meta: Record<string, string | number | boolean>
+  }) {
+    // Every frame — module or demo — is timed here, so the delivery rate the UI
+    // shows is measured from frames that actually arrived.
+    esp32Meter.mark()
+    const state = useApp.getState()
+    const at = new Date().toISOString()
+    const latest = state.samples.length ? state.samples[state.samples.length - 1] : null
+    const metaSignal = Number(frame.meta.signal_raw)
+    const record: Esp32Frame = {
+      frame_id: uid('CAM'),
+      data_url: frame.dataUrl,
+      width: frame.width || Number(frame.meta.w ?? 0),
+      height: frame.height || Number(frame.meta.h ?? 0),
+      at,
+      seq: frame.seq ?? (Number.isFinite(Number(frame.meta.seq)) ? Number(frame.meta.seq) : null),
+      bytes: frame.bytes,
+      fps: esp32Meter.fps,
+      signal_raw: Number.isFinite(metaSignal) ? metaSignal : (latest?.signal_raw ?? null),
+      meta: frame.meta,
+      is_demo: state.demoMode || undefined,
+    }
+
+    esp32Watchdog?.beat()
+    useApp.setState((s) => ({
+      esp32Frame: record,
+      esp32Meta: frame.meta,
+      esp32Frames: esp32Meter.count,
+      esp32Dropped: esp32Client?.dropped ?? s.esp32Dropped,
+      // Only a frame from the module itself can promote the link to STREAMING;
+      // demo frames never claim a live hardware link.
+      esp32Link: s.demoMode || frame.meta.fw === 'demo-esp32cam' ? s.esp32Link : 'STREAMING',
+      esp32Error: null,
+      // Keep a short history for the rate/jitter strip (memory only).
+      esp32History: [
+        ...s.esp32History.slice(-119),
+        { at, bytes: frame.bytes, fps: esp32Meter.fps, signal_raw: record.signal_raw },
+      ],
+    }))
   }
 
   function handleFrame(line: string) {
@@ -530,6 +624,15 @@ export const useApp = create<AppState>()((set, get) => {
     selectedCell: null,
     activeScanId: null,
 
+    esp32Config: { ...ESP32_DEFAULT },
+    esp32Link: 'IDLE',
+    esp32Error: null,
+    esp32Frame: null,
+    esp32History: [],
+    esp32Frames: 0,
+    esp32Dropped: 0,
+    esp32Meta: {},
+
     cameraStatus: 'IDLE',
     cameraError: null,
     cameraDevices: [],
@@ -555,7 +658,7 @@ export const useApp = create<AppState>()((set, get) => {
 
     async hydrate() {
       const available = await storage.isAvailable()
-      const [settings, probes, profiles, scans, measurements, reports, devices] = await Promise.all([
+      const [settings, probes, profiles, scans, measurements, reports, devices, esp32] = await Promise.all([
         storage.get<AppSettings>(STORAGE_KEYS.settings),
         storage.get<Probe[]>(STORAGE_KEYS.probes),
         storage.get<CalibrationProfile[]>(STORAGE_KEYS.profiles),
@@ -563,6 +666,7 @@ export const useApp = create<AppState>()((set, get) => {
         storage.get<Measurement[]>(STORAGE_KEYS.measurements),
         storage.get<Report[]>(STORAGE_KEYS.reports),
         storage.get<DeviceRecord[]>(STORAGE_KEYS.sessions),
+        storage.get<Esp32Config>(STORAGE_KEYS.esp32),
       ])
 
       const activeScan = (scans ?? []).find((s) => s.status === 'ACTIVE' || s.status === 'PAUSED') ?? null
@@ -580,6 +684,7 @@ export const useApp = create<AppState>()((set, get) => {
         reports: reports ?? [],
         devices: devices ?? [],
         activeScanId: activeScan?.scan_id ?? null,
+        esp32Config: esp32 ? { ...ESP32_DEFAULT, ...esp32 } : ESP32_DEFAULT,
       })
 
       if (!available) {
@@ -995,6 +1100,10 @@ export const useApp = create<AppState>()((set, get) => {
         demoStreaming: false,
         cameraCaptures: s.cameraCaptures.filter((c) => !c.is_demo),
         cameraNotice: null,
+        esp32Frame: s.esp32Frame?.is_demo ? null : s.esp32Frame,
+        esp32History: s.esp32History.filter(() => false),
+        esp32Meta: s.esp32Frame?.is_demo ? {} : s.esp32Meta,
+        esp32Frames: s.esp32Frame?.is_demo ? 0 : s.esp32Frames,
         scans: s.scans.filter((x) => !x.is_demo),
         measurements: s.measurements.filter((x) => !x.is_demo),
         activeScanId: s.scans.find((x) => !x.is_demo)?.scan_id ?? null,
@@ -1102,7 +1211,16 @@ export const useApp = create<AppState>()((set, get) => {
       stopCameraHandle()
       set((s) => ({
         cameraStream: null,
-        cameraStatus: 'IDLE',
+        esp32Config: { ...ESP32_DEFAULT },
+    esp32Link: 'IDLE',
+    esp32Error: null,
+    esp32Frame: null,
+    esp32History: [],
+    esp32Frames: 0,
+    esp32Dropped: 0,
+    esp32Meta: {},
+
+    cameraStatus: 'IDLE',
         cameraIsDemo: false,
         cameraFps: 0,
         cameraNotice: null,
@@ -1120,7 +1238,9 @@ export const useApp = create<AppState>()((set, get) => {
       const frame =
         source instanceof HTMLVideoElement
           ? captureFrameFromVideo(source)
-          : captureCanvasFrame(source)
+          : source instanceof HTMLImageElement
+            ? captureImageFrame(source)
+            : captureCanvasFrame(source)
       if (!frame) {
         get().notify('warn', 'No frame to grab', 'The camera has not delivered a picture yet.')
         return null
@@ -1141,6 +1261,33 @@ export const useApp = create<AppState>()((set, get) => {
         log: pushLog(s.log, {
           direction: 'SYS',
           text: `Camera: frame captured ${frame.width}×${frame.height}${state.cameraIsDemo ? ' (demo feed)' : ''}`,
+        }),
+      }))
+      return capture
+    },
+
+    /** Keeps the module frame that is on screen as a still (session only). */
+    captureEsp32FrameNow() {
+      const state = get()
+      const frame = state.esp32Frame
+      if (!frame) {
+        get().notify('warn', 'No module frame', 'The ESP32-CAM has not delivered a picture yet.')
+        return null
+      }
+      const capture: FrameCapture = {
+        capture_id: uid('CAP'),
+        data_url: frame.data_url,
+        width: frame.width,
+        height: frame.height,
+        at: frame.at,
+        source: state.demoMode ? DEMO_CAMERA_DEVICE : (state.esp32Config.host || 'esp32-cam'),
+        is_demo: state.demoMode || undefined,
+      }
+      set((s) => ({
+        cameraCaptures: [capture, ...s.cameraCaptures].slice(0, 12),
+        log: pushLog(s.log, {
+          direction: 'SYS',
+          text: `ESP32-CAM: frame #${frame.seq ?? '—'} kept as a still (${frame.width}×${frame.height})`,
         }),
       }))
       return capture
@@ -1168,6 +1315,130 @@ export const useApp = create<AppState>()((set, get) => {
 
     setCameraNotice(notice) {
       set({ cameraNotice: notice })
+    },
+
+    /* -------------------------- ESP32-CAM link -------------------------- */
+
+    updateEsp32Config(patch) {
+      set((s) => ({ esp32Config: { ...s.esp32Config, ...patch } }))
+      void storage.set(STORAGE_KEYS.esp32, get().esp32Config)
+    },
+
+    async connectEsp32() {
+      const config = get().esp32Config
+      const invalid = validateEsp32Config(config)
+      if (invalid) {
+        set({ esp32Link: 'ERROR', esp32Error: invalid })
+        get().notify('error', 'ESP32-CAM not opened', invalid)
+        return
+      }
+      get().disconnectEsp32()
+      esp32Meter = new FrameRateMeter(3)
+      esp32Abort = new AbortController()
+      set((s) => ({
+        esp32Link: 'CONNECTING',
+        esp32Error: null,
+        esp32Frames: 0,
+        esp32Dropped: 0,
+        esp32History: [],
+        log: pushLog(s.log, { direction: 'SYS', text: `ESP32-CAM: opening ${esp32Url(config)}` }),
+      }))
+
+      // The client reports CONNECTING while the socket is dialled; STREAMING is
+      // only set once a decoded frame actually arrives.
+      if (config.mode === 'websocket') {
+        const client = new Esp32WebSocketClient(config, {
+          onFrame: (frame) => ingestEsp32Frame(frame),
+          onState: (state, detail) => {
+            set({
+              esp32Link: state,
+              esp32Error: state === 'ERROR' ? (detail.message ?? 'The module could not be reached.') : null,
+              esp32Frames: esp32Meter.count,
+            })
+            if (state === 'ERROR') {
+              get().notify('error', 'ESP32-CAM unreachable', detail.message ?? 'Check the module and its address.')
+            }
+          },
+          onLog: (text, direction) =>
+            set((s) => ({ log: pushLog(s.log, { direction, text: `ESP32-CAM: ${text}` }) })),
+        })
+        esp32Client = client
+        client.connect()
+      } else {
+        // MJPEG: picture only; readings keep arriving on the serial link.
+        const url = esp32Url(config)
+        void consumeMjpeg(
+          url,
+          (jpeg) => {
+            const size = jpegSize(jpeg)
+            esp32Meter.mark()
+            ingestEsp32Frame({
+              dataUrl: bytesToDataUrl(jpeg),
+              width: size?.width ?? 0,
+              height: size?.height ?? 0,
+              bytes: jpeg.length,
+              seq: null,
+              meta: { source: 'mjpeg' },
+            })
+            set({ esp32Link: 'STREAMING', esp32Error: null, esp32Frames: esp32Meter.count })
+          },
+          esp32Abort.signal,
+        ).catch((error: unknown) => {
+          if (esp32Abort?.signal.aborted) return
+          const message = error instanceof Error ? error.message : 'The stream could not be read.'
+          set((s) => ({
+            esp32Link: 'ERROR',
+            esp32Error: message,
+            log: pushLog(s.log, { direction: 'ERR', text: `ESP32-CAM: ${message}` }),
+          }))
+          get().notify('error', 'ESP32-CAM stream failed', message)
+        })
+      }
+
+      // A link that stops delivering is reported as STALLED, not left "live".
+      esp32Watchdog?.stop()
+      esp32Watchdog = new StallWatchdog(config.stall_after_ms, (silentMs) => {
+        set((s) => ({
+          esp32Link: 'STALLED',
+          log: pushLog(s.log, {
+            direction: 'ERR',
+            text: `ESP32-CAM: no frame for ${(silentMs / 1000).toFixed(1)} s`,
+          }),
+        }))
+      })
+      esp32Watchdog.start()
+    },
+
+    disconnectEsp32() {
+      esp32Client?.close()
+      esp32Client = null
+      esp32Abort?.abort()
+      esp32Abort = null
+      esp32Watchdog?.stop()
+      esp32Watchdog = null
+      if (get().esp32Link !== 'IDLE') {
+        set((s) => ({
+          esp32Link: 'IDLE',
+          esp32Error: null,
+          log: pushLog(s.log, { direction: 'SYS', text: 'ESP32-CAM: link closed.' }),
+        }))
+      }
+    },
+
+    /**
+     * Accepts one frame from the module (or the demo generator) and records it
+     * with the detector reading that was live at that instant.
+     */
+    esp32IngestDemoFrame(jpeg, meta) {
+      const size = jpegSize(jpeg)
+      ingestEsp32Frame({
+        dataUrl: bytesToDataUrl(jpeg),
+        width: size?.width ?? Number(meta.w ?? 0),
+        height: size?.height ?? Number(meta.h ?? 0),
+        bytes: jpeg.length,
+        seq: typeof meta.seq === 'number' ? meta.seq : null,
+        meta,
+      })
     },
 
     notify(tone, title, detail) {

@@ -19,7 +19,38 @@ export type DeviceState = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'ERROR'
 /** Scan lifecycle (PRD §12.3). */
 export type ScanStatus = 'IDLE' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'FAILED'
 
-export type Transport = 'WEB_SERIAL' | 'WEB_USB' | 'SERIAL_BRIDGE'
+export type Transport = 'WEB_SERIAL' | 'WEB_USB' | 'SERIAL_BRIDGE' | 'ESP32_CAM'
+
+/** How an ESP32-CAM module is pulled off the network (PRD §9.4). */
+export type Esp32StreamMode = 'websocket' | 'mjpeg'
+
+/**
+ * A camera frame that arrived from the ESP32-CAM itself — the module is the
+ * source of machine vision data, so its geometry and health are recorded next to
+ * the picture rather than assumed from the host browser.
+ */
+export interface Esp32Frame {
+  frame_id: string
+  /** JPEG data URL decoded from the module's stream. */
+  data_url: string
+  width: number
+  height: number
+  at: string
+  /** Monotonic sequence reported by the module, when it reports one. */
+  seq: number | null
+  /** Size of the JPEG on the wire, before decoding. */
+  bytes: number
+  /** Measured delivery rate for this link, fps. */
+  fps: number
+  /** Detector reading that was current when this frame landed, if any. */
+  signal_raw: number | null
+  /** Capture settings reported in the module's `#CAM` meta line. */
+  meta: Record<string, string | number | boolean>
+  is_demo?: boolean
+}
+
+/** Status of the ESP32-CAM link. */
+export type Esp32LinkState = 'IDLE' | 'CONNECTING' | 'STREAMING' | 'STALLED' | 'ERROR'
 
 /** PRD §11.1 */
 export interface DeviceRecord {

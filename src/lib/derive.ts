@@ -226,3 +226,131 @@ export function uid(prefix: string): string {
   const stamp = Date.now().toString(36).toUpperCase().slice(-5)
   return `${prefix}-${stamp}${rand}`
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Signal conditioning                                                        */
+/* -------------------------------------------------------------------------- */
+
+export type ConditioningMode = 'OFF' | 'MEDIAN' | 'SMOOTH'
+
+export interface ConditioningOptions {
+  /** 'OFF' draws the frames exactly as they arrived. */
+  mode: ConditioningMode
+  /** Median kernel in frames; odd values 3..9 are used. */
+  medianWindow?: number
+  /** Exponential smoothing factor 0..1 (higher = smoother). */
+  smoothing?: number
+  adcMax?: number
+  /** Raw values at or above this are held out of the estimate. */
+  saturatedAt?: number
+  /** Spike gate: a frame this far (in counts) from the running median is held. */
+  spikeGate?: number
+}
+
+export interface ConditionedPoint {
+  at: number
+  raw: number
+  /** Conditioned value; null where the frame is held out (invalid/saturated). */
+  value: number | null
+  held: boolean
+}
+
+/**
+ * Conditions a frame series for *display only*.
+ *
+ * Three things make the raw trace look unstable and all three are real effects:
+ * ADC quantisation noise, the odd drop-out frame from the Wi-Fi/ADC interaction,
+ * and saturation clipping. So the conditioning is explicit:
+ *
+ *  - `MEDIAN` rejects isolated spikes and drop-outs (a genuine hotspot plateau
+ *    survives a 5-frame median untouched).
+ *  - `SMOOTH` runs an EMA on top of the median series.
+ *  - Saturated / invalid frames are *held out* of the estimate and marked, never
+ *    averaged into it — a clipped reading is not a quiet one.
+ *
+ * Statistics elsewhere in the app keep using the raw frames; this only changes
+ * what the chart draws, and the chart labels the mode it is showing.
+ */
+export function conditionSeries(
+  points: { at: number; raw: number; valid?: boolean }[],
+  options: ConditioningOptions,
+): ConditionedPoint[] {
+  const window = Math.max(1, Math.min(9, Math.round(options.medianWindow ?? 5)) | 1)
+  const alpha = Math.min(0.95, Math.max(0.05, options.smoothing ?? 0.35))
+  const saturatedAt = options.saturatedAt ?? Number.POSITIVE_INFINITY
+  const gate = options.spikeGate ?? 0
+
+  const gateFlags = points.map((p) => {
+    if (p.valid === false) return true
+    if (p.raw <= 0) return true
+    if (p.raw >= saturatedAt) return true
+    return false
+  })
+
+  // Median over the two-sided window, skipping held frames.
+  const medianised = points.map((_point, index) => {
+    if (gateFlags[index]) return null
+    const half = (window - 1) / 2
+    const neighbourhood: number[] = []
+    for (let i = index - half; i <= index + half; i++) {
+      if (i < 0 || i >= points.length) continue
+      if (gateFlags[i]) continue
+      neighbourhood.push(points[i].raw)
+    }
+    if (neighbourhood.length === 0) return null
+    neighbourhood.sort((a, b) => a - b)
+    const mid = Math.floor(neighbourhood.length / 2)
+    return neighbourhood.length % 2 ? neighbourhood[mid] : (neighbourhood[mid - 1] + neighbourhood[mid]) / 2
+  })
+
+  // Spike gate relative to the running median, when requested.
+  const kept = medianised.map((value, index) => {
+    if (value === null) return null
+    if (gate <= 0) return value
+    const windowVals = medianised
+      .slice(Math.max(0, index - 4), Math.min(medianised.length, index + 5))
+      .filter((v): v is number => v !== null)
+    if (windowVals.length < 3) return value
+    const local = windowVals.reduce((a, b) => a + b, 0) / windowVals.length
+    return Math.abs(value - local) > gate ? null : value
+  })
+
+  // EMA, only where a conditioned value exists.
+  let ema: number | null = null
+  return points.map((point, index) => {
+    const value = kept[index]
+    if (value === null) {
+      return { at: point.at, raw: point.raw, value: ema, held: true }
+    }
+    if (options.mode === 'OFF') return { at: point.at, raw: point.raw, value: point.raw, held: false }
+    ema = ema === null ? value : ema + alpha * (value - ema)
+    return { at: point.at, raw: point.raw, value: options.mode === 'MEDIAN' ? value : ema, held: false }
+  })
+}
+
+/**
+ * Frame-to-frame stability of a series, as a percentage of the mean. This is the
+ * number that says whether the trace looks calm — it is computed from the raw
+ * frames, so it cannot be improved by drawing differently.
+ */
+export function stabilityIndex(values: number[]): { mean: number; meanAbsDelta: number; pct: number } {
+  if (values.length < 2) return { mean: values[0] ?? 0, meanAbsDelta: 0, pct: 0 }
+  const mean = values.reduce((a, b) => a + b, 0) / values.length
+  let sum = 0
+  for (let i = 1; i < values.length; i++) sum += Math.abs(values[i] - values[i - 1])
+  const meanAbsDelta = sum / (values.length - 1)
+  return { mean, meanAbsDelta, pct: mean > 0 ? (meanAbsDelta / mean) * 100 : 0 }
+}
+
+/** Reading gap statistics — how evenly frames arrive (jitter in ms). */
+export function arrivalJitter(times: number[]): { median: number; p95: number; worst: number } {
+  const gaps: number[] = []
+  for (let i = 1; i < times.length; i++) {
+    const gap = times[i] - times[i - 1]
+    if (gap > 0) gaps.push(gap)
+  }
+  if (gaps.length === 0) return { median: 0, p95: 0, worst: 0 }
+  const sorted = [...gaps].sort((a, b) => a - b)
+  const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]
+  return { median: at(0.5), p95: at(0.95), worst: sorted[sorted.length - 1] }
+}

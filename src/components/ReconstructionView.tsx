@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, RotateCcw, ScanSearch } from 'lucide-react'
+import { Box, Move3d, RotateCcw, ScanSearch } from 'lucide-react'
 import { measurementsForScan, useApp } from '../store/app'
 import {
   drawScene,
@@ -15,11 +15,18 @@ import { cn } from './ui'
 import { useDemoFeedPainter } from './useDemoFeed'
 
 /**
- * Reconstruction panel: the same board, projected in 3D.
+ * 3D reconstruction of the board.
  *
- * The camera frame is the texture of the board plane; captured EMI readings are
- * draped over it as a surface. With no camera the board is a bare wireframe — the
- * geometry comes from the scan, so nothing fabricated is ever shown.
+ * Preference order for the texture — the same order the viewfinder uses, so the
+ * two panels always agree on what the machine is looking at:
+ *
+ *   1. the last frame decoded from the **ESP32-CAM**
+ *   2. the browser camera stream
+ *   3. the demo board (Demo Mode only)
+ *   4. no texture at all — a bare wireframe sized from the scan
+ *
+ * The projection, relief and camera are the same in every case, so the geometry
+ * never depends on which camera happens to be attached.
  */
 export function ReconstructionView({ className }: { className?: string }) {
   const scans = useApp((s) => s.scans)
@@ -27,7 +34,8 @@ export function ReconstructionView({ className }: { className?: string }) {
   const activeScanId = useApp((s) => s.activeScanId)
   const unit = useApp((s) => s.settings.acquisition.unit)
   const cameraStream = useApp((s) => s.cameraStream)
-  const cameraIsDemo = useApp((s) => s.cameraIsDemo)
+  const esp32Frame = useApp((s) => s.esp32Frame)
+  const esp32Link = useApp((s) => s.esp32Link)
   const demoMode = useApp((s) => s.demoMode)
   const overlay = useApp((s) => s.cameraOverlay)
   const cropMode = useApp((s) => s.cameraCrop)
@@ -38,11 +46,11 @@ export function ReconstructionView({ className }: { className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const demoCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const moduleImage = useRef<HTMLImageElement | null>(null)
   const [camera, setCamera] = useState<SceneCamera>(DEFAULT_CAMERA)
-  const [size, setSize] = useState({ width: 640, height: 300 })
+  const [size, setSize] = useState({ width: 640, height: 320 })
+  const [textureReady, setTextureReady] = useState(0)
   const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
-  /** Redraw driver: the texture is a video, so the projection needs a tick. */
-  const [tick, setTick] = useState(0)
 
   const scan = scans.find((s) => s.scan_id === activeScanId) ?? scans[0] ?? null
   const scanMeasurements = useMemo(
@@ -50,10 +58,14 @@ export function ReconstructionView({ className }: { className?: string }) {
     [measurements, scan],
   )
 
+  const esp32Live = Boolean(esp32Frame) && (esp32Link === 'STREAMING' || esp32Link === 'STALLED')
+  const usbLive = Boolean(cameraStream)
+
   /* Geometry + coverage straight from the measured cells. */
   const coverage: CoverageGrid | null = useMemo(() => {
     if (!scan) return null
-    const surface = buildSurface(scan, scanMeasurements, 40)
+    // Denser resampling than the dashboard surface: this panel has the pixels.
+    const surface = buildSurface(scan, scanMeasurements, 48)
     if (surface.measured === 0) return null
     return {
       cols: surface.cols,
@@ -76,13 +88,13 @@ export function ReconstructionView({ className }: { className?: string }) {
     }
   }, [scan, coverage])
 
-  /* ----- source elements: geometry never changes when the camera does ----- */
+  /* ----- measure the panel ----- */
   useEffect(() => {
     const el = wrap.current
     if (!el) return
     const measure = () => {
       const rect = el.getBoundingClientRect()
-      setSize({ width: Math.max(220, rect.width), height: Math.max(160, rect.height) })
+      setSize({ width: Math.max(240, rect.width), height: Math.max(180, rect.height) })
     }
     measure()
     const observer = new ResizeObserver(measure)
@@ -90,86 +102,115 @@ export function ReconstructionView({ className }: { className?: string }) {
     return () => observer.disconnect()
   }, [])
 
-  /* Mirror the live camera into this panel's own hidden <video>. */
+  /* ----- decode the module's latest frame as the texture ----- */
+  useEffect(() => {
+    if (!esp32Live || !esp32Frame) return
+    let cancelled = false
+    const image = new Image()
+    image.decoding = 'async'
+    image.onload = () => {
+      if (cancelled) return
+      moduleImage.current = image
+      setTextureReady((n) => n + 1)
+    }
+    image.src = esp32Frame.data_url
+    return () => {
+      cancelled = true
+    }
+  }, [esp32Frame, esp32Live])
+
+  /* ----- browser camera element ----- */
   useEffect(() => {
     const el = videoRef.current
     if (!el) return
-    if (cameraStream) {
+    if (usbLive && cameraStream) {
       el.srcObject = cameraStream
       const played = el.play?.()
       if (played && typeof played.catch === 'function') played.catch(() => {})
     } else if (el.srcObject) {
       el.srcObject = null
     }
-  }, [cameraStream])
+  }, [usbLive, cameraStream])
 
-  /* Demo feed: the same painted frame, so the projection has a texture. */
-  useDemoFeedPainter(demoCanvasRef, demoMode && !cameraStream, {
+  /* ----- demo texture ----- */
+  useDemoFeedPainter(demoCanvasRef, demoMode && !esp32Live && !usbLive, {
     widthMm: scan?.board_width_mm ?? 60,
     heightMm: scan?.board_height_mm ?? 40,
   })
 
-  const crop: BoardCrop = cropMode === 'BOARD' ? DEFAULT_CROP : { x: 0, y: 0, w: 1, h: 1 }
-  const hasCamera = Boolean(cameraStream) || demoMode
-
+  /* ----- redraw: on any change, and on a steady tick while a texture is live ----- */
   useEffect(() => {
-    if (!cameraStream && !demoMode) return
-    const id = window.setInterval(() => setTick((t) => (t + 1) % 1000), 120)
+    if (!esp32Live && !usbLive && !demoMode) return
+    const id = window.setInterval(() => setTextureReady((n) => (n + 1) % 100000), 140)
     return () => window.clearInterval(id)
-  }, [cameraStream, demoMode])
+  }, [esp32Live, usbLive, demoMode])
 
-  /* Copy the source into an offscreen canvas so drawImage is always synchronous. */
+  const crop: BoardCrop = cropMode === 'BOARD' ? DEFAULT_CROP : { x: 0, y: 0, w: 1, h: 1 }
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    canvas.width = size.width * dpr
-    canvas.height = size.height * dpr
-    canvas.style.width = `${size.width}px`
-    canvas.style.height = `${size.height}px`
+    // Supersample: this is the panel the operator judges quality on.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5)
+    canvas.width = Math.round(size.width * dpr)
+    canvas.height = Math.round(size.height * dpr)
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    let source: SceneTexture | null = null
-    if (cameraStream && videoRef.current && videoRef.current.videoWidth > 0) {
-      source = {
+    let texture: SceneTexture | null = null
+    if (esp32Live && moduleImage.current) {
+      texture = {
+        image: moduleImage.current,
+        width: moduleImage.current.naturalWidth || esp32Frame?.width || 640,
+        height: moduleImage.current.naturalHeight || esp32Frame?.height || 480,
+        crop,
+        brightness: 1,
+      }
+    } else if (usbLive && videoRef.current && videoRef.current.videoWidth > 0) {
+      texture = {
         image: videoRef.current,
         width: videoRef.current.videoWidth,
         height: videoRef.current.videoHeight,
         crop,
-        brightness: 0.82,
+        brightness: 1,
       }
-    } else if (!cameraStream && demoMode && demoCanvasRef.current) {
-      source = {
+    } else if (!esp32Live && !usbLive && demoMode && demoCanvasRef.current) {
+      texture = {
         image: demoCanvasRef.current,
-        width: demoCanvasRef.current.width,
-        height: demoCanvasRef.current.height,
+        width: demoCanvasRef.current.width || 960,
+        height: demoCanvasRef.current.height || 600,
         crop,
-        brightness: 0.82,
+        brightness: 1,
       }
     }
 
-    drawScene(
-      ctx,
-      size,
-      camera,
-      {
-        widthMm: scan?.board_width_mm ?? 60,
-        heightMm: scan?.board_height_mm ?? 40,
-        coverage,
-        role: overlay === 'SURFACE' ? 'overlay' : 'board',
-        texture: source,
-        unit,
-        peak,
-        note: !hasCamera
-          ? 'NO CAMERA — frame from scan geometry'
-          : cameraIsDemo
-            ? 'DEMO TEXTURE'
-            : null,
-      },
-    )
-  }, [size, camera, scan, coverage, unit, peak, overlay, crop, hasCamera, cameraStream, demoMode, cameraIsDemo, tick])
+    drawScene(ctx, size, camera, {
+      widthMm: scan?.board_width_mm ?? 60,
+      heightMm: scan?.board_height_mm ?? 40,
+      coverage: overlay === 'SURFACE' ? coverage : null,
+      role: overlay === 'SURFACE' ? 'overlay' : 'board',
+      texture,
+      unit,
+      peak: overlay === 'SURFACE' ? peak : null,
+      note: texture ? (demoMode && !esp32Live && !usbLive ? 'DEMO TEXTURE' : null) : 'NO CAMERA — scan geometry only',
+      relief: 0.16,
+    })
+  }, [
+    size,
+    camera,
+    scan,
+    coverage,
+    unit,
+    peak,
+    overlay,
+    crop,
+    esp32Live,
+    usbLive,
+    demoMode,
+    esp32Frame,
+    textureReady,
+  ])
 
   return (
     <div className={cn('relative flex h-full min-h-0 flex-col', className)}>
@@ -202,10 +243,10 @@ export function ReconstructionView({ className }: { className?: string }) {
         <button
           type="button"
           onClick={() => setCamera(DEFAULT_CAMERA)}
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-line bg-white/[0.03] text-ink-dim hover:text-ink"
-          title="Reset view"
+          className="inline-flex h-5 items-center gap-1 rounded-full border border-line bg-white/[0.03] px-2 text-[9.5px] text-ink-dim hover:text-ink"
+          title="Reset the orbit"
         >
-          <RotateCcw size={9} />
+          <RotateCcw size={9} /> reset
         </button>
       </div>
 
@@ -222,8 +263,8 @@ export function ReconstructionView({ className }: { className?: string }) {
           const dy = e.clientY - drag.current.y
           setCamera((prev) => ({
             ...prev,
-            yaw: drag.current!.yaw + dx * 0.008,
-            pitch: Math.max(0.28, Math.min(1.35, drag.current!.pitch + dy * 0.005)),
+            yaw: drag.current!.yaw + dx * 0.009,
+            pitch: Math.max(0.24, Math.min(1.42, drag.current!.pitch + dy * 0.005)),
           }))
         }}
         onPointerUp={() => {
@@ -234,13 +275,23 @@ export function ReconstructionView({ className }: { className?: string }) {
         }}
         onWheel={(e) => {
           e.preventDefault()
-          setCamera((prev) => ({ ...prev, zoom: Math.max(0.6, Math.min(2, prev.zoom - e.deltaY * 0.0012)) }))
+          setCamera((prev) => ({ ...prev, zoom: Math.max(0.65, Math.min(2.1, prev.zoom - e.deltaY * 0.0013)) }))
         }}
       >
-        <canvas ref={canvasRef} className="block h-full w-full rounded-[7px]" aria-label="3D reconstruction of the board from the camera frame" />
-        <span className="pointer-events-none absolute top-2 right-2 rounded border border-white/10 bg-black/50 px-1.5 py-[2px] text-[9px] text-ink-dim backdrop-blur">
-          drag to orbit · wheel to zoom
+        <canvas
+          ref={canvasRef}
+          className="block h-full w-full rounded-[7px]"
+          style={{ width: '100%', height: '100%' }}
+          aria-label="3D reconstruction of the board, textured with the ESP32-CAM frame"
+        />
+        <span className="pointer-events-none absolute top-2 right-2 inline-flex items-center gap-1 rounded border border-white/10 bg-black/55 px-1.5 py-[2px] text-[9px] text-ink-dim backdrop-blur">
+          <Move3d size={9} /> drag to orbit · wheel to zoom
         </span>
+        {esp32Live ? (
+          <span className="pointer-events-none absolute bottom-2 left-2 rounded border border-white/10 bg-black/55 px-1.5 py-[2px] text-[9px] text-ink-dim backdrop-blur">
+            texture · ESP32-CAM frame #{esp32Frame?.seq ?? '—'}
+          </span>
+        ) : null}
       </div>
 
       {/* Off-screen sources. Never displayed: they exist to feed the projection. */}
@@ -249,4 +300,3 @@ export function ReconstructionView({ className }: { className?: string }) {
     </div>
   )
 }
-

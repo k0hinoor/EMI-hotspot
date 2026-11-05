@@ -282,7 +282,7 @@ export function Settings() {
 
       <div className="grid min-h-0 grid-rows-[minmax(0,1.35fr)_minmax(0,1fr)] gap-2.5 max-xl:grid-rows-none">
         <Frame className="min-h-[300px] xl:min-h-0">
-          <FrameHeader title="Link log" subtitle="raw serial traffic, newest first" icon={<Terminal size={12} />} />
+          <FrameHeader title="Link log" subtitle="raw serial and module traffic, newest first" icon={<Terminal size={12} />} />
           <FrameBody noPad className="font-mono">
             {log.length === 0 ? (
               <div className="px-3 py-6 text-center font-sans text-[10px] text-ink-dim">No traffic recorded this session.</div>

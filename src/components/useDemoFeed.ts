@@ -1,5 +1,6 @@
 import { useEffect, type RefObject } from 'react'
-import { paintDemoFrame } from '../lib/demo'
+import { paintDemoFrame, paintDemoModuleFrame } from '../lib/demo'
+import { useApp } from '../store/app'
 
 /**
  * Paints the synthetic demo camera frame into a canvas on an animation loop.
@@ -37,4 +38,51 @@ export function useDemoFeedPainter(
     raf = requestAnimationFrame(paint)
     return () => cancelAnimationFrame(raf)
   }, [canvasRef, enabled, board.widthMm, board.heightMm])
+}
+
+/**
+ * Demo module feed.
+ *
+ * While Demo Mode is on this paints a synthetic board and pushes it through the
+ * *real* ESP32-CAM ingest path (`esp32IngestDemoFrame` → decode → texture), so the
+ * Machine Vision page behaves exactly as it does with a module attached — but
+ * every frame is stamped as demo.
+ */
+export function useDemoModuleFeed(
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  enabled: boolean,
+  board: { widthMm: number; heightMm: number },
+  fps = 8,
+): void {
+  useEffect(() => {
+    if (!enabled) return
+    // The publisher only needs a surface to paint into; an off-screen canvas is
+    // fine when the page has not mounted one yet.
+    const surface = canvasRef.current ?? document.createElement('canvas')
+    const started = performance.now()
+    const push = () => {
+      const t = (performance.now() - started) / 1000
+      const frame = paintDemoModuleFrame(surface, {
+        widthMm: board.widthMm,
+        heightMm: board.heightMm,
+        t,
+        width: 640,
+        height: 480,
+      })
+      if (!frame) return
+      useApp.getState().esp32IngestDemoFrame(frame.bytes, {
+        seq: Math.round(t * fps),
+        w: frame.width,
+        h: frame.height,
+        fps,
+        probe: 'E',
+        status: 'VALID',
+        signal_raw: Math.round(1800 + Math.sin(t * 1.3) * 260),
+        fw: 'demo-esp32cam',
+      })
+    }
+    const id = window.setInterval(push, Math.round(1000 / fps))
+    push()
+    return () => window.clearInterval(id)
+  }, [canvasRef, enabled, board.widthMm, board.heightMm, fps])
 }

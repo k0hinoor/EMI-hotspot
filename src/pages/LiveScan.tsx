@@ -38,7 +38,7 @@ import { ProbeSelector } from '../components/ProbeSelector'
 import { SignalChart } from '../components/SignalChart'
 import { ConnectDialog } from '../components/ConnectDialog'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-import { formatNumber, formatTime, probeColor, probeLabel, relativeTime } from '../lib/derive'
+import { formatNumber, formatTime, probeColor, probeLabel, relativeTime, stabilityIndex } from '../lib/derive'
 import type { QualityStatus, SignalState } from '../lib/types'
 
 function signalTone(state: SignalState): Tone {
@@ -88,6 +88,7 @@ export function LiveScan() {
 
   const [connectOpen, setConnectOpen] = useState(false)
   const [windowSeconds, setWindowSeconds] = useState(30)
+  const [conditioning, setConditioning] = useState<'SMOOTH' | 'MEDIAN' | 'OFF'>('SMOOTH')
   const [captureScanId, setCaptureScanId] = useState<string>(activeScanId ?? '')
   const [coordinate, setCoordinate] = useState<{ x: string; y: string }>({ x: '', y: '' })
   const [lastCaptured, setLastCaptured] = useState<{ raw: number; at: string; quality: QualityStatus } | null>(null)
@@ -96,6 +97,9 @@ export function LiveScan() {
   const connected = deviceState === 'CONNECTED'
   const live = stats(windowSeconds)
   const latest = samples.length ? samples[samples.length - 1] : null
+  // Trace stability, computed from the raw frames so the number cannot be
+  // improved by drawing the line differently.
+  const stability = stabilityIndex(samples.slice(-120).map((s) => s.signal_raw))
   const probeType = deviceProbe ?? activeProbeType
 
   const activeScans = useMemo(
@@ -237,6 +241,16 @@ export function LiveScan() {
                     { value: '300', label: '5m' },
                   ]}
                 />
+                <Segmented
+                  size="xs"
+                  value={conditioning}
+                  onChange={(v) => setConditioning(v)}
+                  options={[
+                    { value: 'SMOOTH', label: 'Smoothed', title: 'Median + EMA trace over the raw frames' },
+                    { value: 'MEDIAN', label: 'Median', title: 'Median only — rejects spike and drop-out frames' },
+                    { value: 'OFF', label: 'Raw', title: 'Every frame exactly as received' },
+                  ]}
+                />
                 <Button
                   size="xs"
                   variant="ghost"
@@ -280,6 +294,8 @@ export function LiveScan() {
                   adcMax={cfg.adc_max}
                   baseline={live.baseline}
                   color={probeColor(probeType)}
+                  conditioning={conditioning}
+                  saturatedAt={cfg.saturated_at}
                 />
               </ErrorBoundary>
             )}
@@ -316,6 +332,14 @@ export function LiveScan() {
               {acquiring ? 'running' : connected ? 'paused' : 'idle'}
               <span className="text-ink-dim/50">·</span>
               <span className="tabular">{samples.length} in buffer</span>
+              {samples.length > 4 ? (
+                <span
+                  className="tabular"
+                  title="Frame-to-frame variation as a share of the mean, from the raw frames"
+                >
+                  · stability {stability.pct < 3 ? 'high' : stability.pct < 9 ? 'good' : 'low'} ({stability.pct.toFixed(1)}%)
+                </span>
+              ) : null}
             </div>
           </FrameFooter>
         </Frame>

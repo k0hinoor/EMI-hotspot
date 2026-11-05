@@ -19,6 +19,8 @@ available only through the explicit **Demo Mode** documented at the end of this 
 | 11 | E/H comparison | `SignalAnalysis` → "Scan comparison" | Grouped bars, separate axes per probe type — never a shared scale |
 | 12 | (implicit) Connection prompt / no fabricated readings | Header rail, `ConnectDialog`, empty states | With no device every value field stays blank and labelled |
 | 13 | Machine view: live camera + 3D reconstruction | `src/pages/MachineVision.tsx`, `CameraView`, `ReconstructionView` | Real `getUserMedia` stream, frame-as-texture projection, measured field draped over the board, stills exportable as PNG |
+| 14 | ESP32-CAM as the data source | `src/lib/esp32cam.ts`, `firmware/emi_hotspot_esp32cam.ino`, `src/pages/MachineVision.tsx` | WebSocket (meta + JPEG) or MJPEG link, measured fps/jitter/frame size, stall detection, module frame as the 3D texture |
+| 15 | Trace stability controls | `conditionSeries()` in `src/lib/derive.ts`, `src/components/SignalChart.tsx` | Median/EMA display conditioning with saturated and spike frames held out; raw frames always visible; stability % computed from raw |
 
 ## Navigation — page by page, never one long scroll
 

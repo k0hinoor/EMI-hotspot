@@ -4,6 +4,7 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, MarkLineComponent, AxisPointerComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { Sample } from '../lib/types'
+import { conditionSeries, type ConditioningMode } from '../lib/derive'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, MarkLineComponent, AxisPointerComponent, CanvasRenderer])
 
@@ -19,6 +20,10 @@ export interface SignalChartProps {
   /** Fill the parent box instead of using a fixed height. */
   fill?: boolean
   color?: string
+  /** Display conditioning. Raw frames are always available with 'OFF'. */
+  conditioning?: ConditioningMode
+  /** Raw values at or above this are held out of the conditioned estimate. */
+  saturatedAt?: number
 }
 
 /**
@@ -34,6 +39,8 @@ export function SignalChart({
   height = 240,
   fill,
   color = '#35e5c5',
+  conditioning = 'SMOOTH',
+  saturatedAt,
 }: SignalChartProps) {
   const holder = useRef<HTMLDivElement | null>(null)
   const chart = useRef<echarts.ECharts | null>(null)
@@ -57,18 +64,33 @@ export function SignalChart({
     if (!instance) return
     const cutoff = Date.now() - windowSeconds * 1000
     const visible = samples.filter((s) => new Date(s.received_at).getTime() >= cutoff)
+    const conditioned = conditionSeries(
+      visible.map((s) => ({
+        at: new Date(s.received_at).getTime(),
+        raw: s.signal_raw,
+        valid: s.quality === 'VALID' || s.quality === 'UNSTABLE',
+      })),
+      { mode: conditioning, medianWindow: 5, smoothing: 0.38, adcMax, saturatedAt },
+    )
     const data = visible.map((s) => [new Date(s.received_at).getTime(), s.signal_raw])
+    // Conditioned trace: null holes are where a frame was held out, so a drop-out
+    // shows as a gap instead of a fake dip.
+    const conditionedData = conditioned
+      .map((p) => [p.at, p.value])
+      .filter((row): row is [number, number] => typeof row[1] === 'number')
+    const heldCount = conditioned.filter((p) => p.held).length
+    // Surface the count in the tooltip footer so a held-out frame is visible.
     const filtered = visible
       .filter((s) => s.signal_filtered !== null)
       .map((s) => [new Date(s.received_at).getTime(), s.signal_filtered as number])
 
-    const hasFiltered = filtered.length > 0
+    const hasFiltered = filtered.length > 0 && conditioning === 'OFF'
 
     instance.setOption(
       {
         animation: false,
         backgroundColor: 'transparent',
-        grid: { left: 46, right: hasFiltered ? 16 : 16, top: 16, bottom: 22 },
+        grid: { left: 46, right: 16, top: 16, bottom: 22 },
         tooltip: {
           trigger: 'axis',
           backgroundColor: 'rgba(11,14,22,0.96)',
@@ -85,7 +107,10 @@ export function SignalChart({
             const rows = list
               .map((p) => `<div style="display:flex;gap:8px;justify-content:space-between"><span>${p.seriesName}</span><span>${p.value[1]} ${unit}</span></div>`)
               .join('')
-            return `<div style="font-size:10px;color:#98A0B3;margin-bottom:3px">${time}</div>${rows}`
+            const held = heldCount > 0 && conditioning !== 'OFF'
+              ? `<div style="font-size:9px;color:#98A0B3;margin-top:3px">${heldCount} frame(s) held out of the estimate</div>`
+              : ''
+            return `<div style="font-size:10px;color:#98A0B3;margin-bottom:3px">${time}</div>${rows}${held}`
           },
         },
         xAxis: {
@@ -117,12 +142,35 @@ export function SignalChart({
           },
         },
         series: [
+          ...(conditioning === 'OFF'
+            ? []
+            : [
+                {
+                  name: conditioning === 'MEDIAN' ? 'Median (display)' : 'Smoothed (display)',
+                  type: 'line' as const,
+                  showSymbol: false,
+                  data: conditionedData,
+                  // Below the raw trace, so the eye reads it as the trend of the
+                  // frames behind it rather than as a second measurement.
+                  z: 1,
+                  lineStyle: { width: 2.4, color: '#ffffff', opacity: 0.92, shadowColor: '#ffffff44', shadowBlur: 12 },
+                  itemStyle: { color: '#ffffff' },
+                  sampling: 'lttb' as const,
+                },
+              ]),
           {
             name: 'Raw',
             type: 'line',
             showSymbol: false,
             data,
-            lineStyle: { width: 1.8, color, shadowColor: `${color}77`, shadowBlur: 14 },
+            z: 2,
+            lineStyle: {
+              width: conditioning === 'OFF' ? 1.8 : 1.1,
+              color,
+              opacity: conditioning === 'OFF' ? 1 : 0.45,
+              shadowColor: `${color}77`,
+              shadowBlur: 14,
+            },
             itemStyle: { color },
             areaStyle: {
               color: {
@@ -169,7 +217,7 @@ export function SignalChart({
       },
       { notMerge: false },
     )
-  }, [samples, windowSeconds, unit, adcMax, baseline, color])
+  }, [samples, windowSeconds, unit, adcMax, baseline, color, conditioning, saturatedAt])
 
   return <div ref={holder} style={fill ? { height: '100%', width: '100%' } : { height }} className="w-full" />
 }

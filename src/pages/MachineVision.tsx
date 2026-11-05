@@ -1,15 +1,23 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Activity,
   Box,
   Camera,
   CameraOff,
+  Cpu,
   Crosshair,
   Download,
+  Gauge,
   Layers,
+  Link2,
+  Plug,
   Radio,
   RefreshCw,
   Trash2,
   Video,
+  Waves,
+  Wifi,
+  WifiOff,
 } from 'lucide-react'
 import { measurementsForScan, useApp } from '../store/app'
 import {
@@ -17,37 +25,58 @@ import {
   Button,
   Divider,
   EmptyState,
+  Field,
   Frame,
   FrameBody,
   FrameFooter,
   FrameHeader,
   KeyValue,
+  NumberInput,
   Segmented,
   Select,
   StatusDot,
+  TextInput,
   cn,
 } from '../components/ui'
 import { CameraView } from '../components/CameraView'
 import { ReconstructionView } from '../components/ReconstructionView'
-import { formatDateTime, formatNumber, formatTime, probeLabel, summariseScan, gridGeometry } from '../lib/derive'
+import { Sparkline } from '../components/DataViz'
+import {
+  arrivalJitter,
+  formatDateTime,
+  formatNumber,
+  formatTime,
+  gridGeometry,
+  probeLabel,
+  summariseScan,
+} from '../lib/derive'
 import { cameraSupported } from '../lib/camera'
+import { esp32Url } from '../lib/esp32cam'
+import { useDemoModuleFeed } from '../components/useDemoFeed'
 
 export function MachineVision() {
   const {
+    esp32Config,
+    esp32Link,
+    esp32Error,
+    esp32Frame,
+    esp32History,
+    esp32Frames,
+    esp32Dropped,
+    esp32Meta,
+    updateEsp32Config,
+    connectEsp32,
+    disconnectEsp32,
     cameraStatus,
-    cameraError,
     cameraDevices,
     cameraDeviceId,
-    cameraIsDemo,
-    cameraStream,
     cameraInfo,
-    cameraFps,
     cameraCaptures,
     cameraOverlay,
-    cameraNotice,
     demoMode,
     deviceState,
     signalState,
+    samples,
     scans,
     measurements,
     activeScanId,
@@ -57,6 +86,7 @@ export function MachineVision() {
     selectCamera,
     refreshCameras,
     captureFrameNow,
+  captureEsp32FrameNow,
     deleteCapture,
     clearCaptures,
     setCameraOverlay,
@@ -65,10 +95,10 @@ export function MachineVision() {
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const demoRef = useRef<HTMLCanvasElement | null>(null)
-  const [linkNote, setLinkNote] = useState<string | null>(null)
+  const [showConfig, setShowConfig] = useState(false)
 
-  const live = cameraStatus === 'LIVE' && Boolean(cameraStream)
-  const demoFeed = demoMode && !live
+  const esp32Live = esp32Link === 'STREAMING' || esp32Link === 'STALLED'
+  const usbLive = cameraStatus === 'LIVE'
   const supported = cameraSupported()
 
   const scan = scans.find((s) => s.scan_id === activeScanId) ?? scans[0] ?? null
@@ -76,15 +106,34 @@ export function MachineVision() {
   const geometry = scan ? gridGeometry(scan.board_width_mm, scan.board_height_mm, scan.grid_spacing_mm) : null
   const summary = scan ? summariseScan(scanMeasurements, geometry?.totalCells ?? 0, settings.acquisition.unit) : null
 
-  /* Enumerate once on mount — this is a real device query, not a guess. */
+  const arrival = useMemo(
+    () => arrivalJitter(esp32History.map((h) => new Date(h.at).getTime())),
+    [esp32History],
+  )
+  const byteSeries = esp32History.slice(-48).map((h) => h.bytes)
+  const fpsSeries = esp32History.slice(-48).map((h) => Math.round(h.fps * 10) / 10)
+
+  const demoModuleRef = useRef<HTMLCanvasElement | null>(null)
+  const demoModuleOn = demoMode && !esp32Live && !usbLive
+  useDemoModuleFeed(demoModuleRef, demoModuleOn, {
+    widthMm: scan?.board_width_mm ?? 60,
+    heightMm: scan?.board_height_mm ?? 40,
+  })
+
   useEffect(() => {
     void refreshCameras()
   }, [refreshCameras])
 
+  /** Grab the frame currently on screen — module frame first, then USB, then demo. */
   const grab = () => {
-    const source = live ? videoRef.current : demoFeed ? demoRef.current : null
+    if (esp32Frame && (esp32Live || demoMode)) {
+      const capture = captureEsp32FrameNow()
+      if (capture) notify('ok', 'Frame kept', `${capture.width}×${capture.height} · session only.`)
+      return
+    }
+    const source = usbLive ? videoRef.current : demoMode ? demoRef.current : null
     if (!source) {
-      notify('warn', 'No picture to capture', 'Start the camera first — nothing is generated without it.')
+      notify('warn', 'No picture to capture', 'Connect the ESP32-CAM or a camera first — nothing is generated without it.')
       return
     }
     const capture = captureFrameNow(source)
@@ -96,8 +145,7 @@ export function MachineVision() {
     const binary = atob(bytes)
     const buffer = new Uint8Array(binary.length)
     for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i)
-    const blob = new Blob([buffer], { type: 'image/png' })
-    const url = URL.createObjectURL(blob)
+    const url = URL.createObjectURL(new Blob([buffer], { type: 'image/png' }))
     const a = document.createElement('a')
     a.href = url
     a.download = `emi-machine-${at.replace(/[:.]/g, '-')}.png`
@@ -105,28 +153,40 @@ export function MachineVision() {
     setTimeout(() => URL.revokeObjectURL(url), 2000)
   }
 
-  const cameraTone = live ? 'ok' : demoFeed ? 'warn' : cameraStatus === 'DENIED' ? 'danger' : 'neutral'
+  const linkTone = esp32Link === 'STREAMING' ? 'ok' : esp32Link === 'STALLED' ? 'warn' : esp32Link === 'ERROR' ? 'danger' : 'neutral'
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 gap-2.5 max-xl:h-auto xl:grid-rows-[minmax(0,1.55fr)_minmax(0,0.62fr)] xl:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)_270px]">
-      {/* ---------------- live camera ---------------- */}
+    <div className="grid h-full min-h-0 grid-cols-1 gap-2.5 max-xl:h-auto xl:grid-rows-[minmax(0,1.5fr)_minmax(0,0.72fr)] xl:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)_284px]">
+      {/* ---------------- live picture ---------------- */}
       <Frame className="min-h-[300px] xl:min-h-0">
         <FrameHeader
-          title="Machine view · camera"
+          title="Machine view"
           subtitle={
-            live
-              ? `${cameraInfo.width ?? '?'}×${cameraInfo.height ?? '?'} · ${cameraFps || Math.round(cameraInfo.frameRate ?? 0)} fps measured`
-              : demoFeed
-                ? 'demo feed — painted by the demo module, not a camera'
-                : 'no picture — the camera is the only source'
+            esp32Live && esp32Frame
+              ? `ESP32-CAM · ${esp32Frame.width}×${esp32Frame.height} · ${esp32Frame.fps.toFixed(1)} fps delivered · frame #${esp32Frame.seq ?? '—'}`
+              : usbLive
+                ? `USB camera · ${cameraInfo.width ?? '?'}×${cameraInfo.height ?? '?'}`
+                : demoMode
+                  ? 'demo feed — painted by the demo module, not a camera'
+                  : 'no picture — the module is the only source'
           }
           icon={<Camera size={13} />}
           right={
             <>
-              <Badge tone={cameraTone} dot>
-                {live ? 'LIVE' : demoFeed ? 'DEMO FEED' : cameraStatus === 'REQUESTING' ? 'OPENING' : 'OFF'}
+              <Badge tone={linkTone} dot>
+                {esp32Link === 'STREAMING'
+                  ? 'ESP32 LIVE'
+                  : esp32Link === 'STALLED'
+                    ? 'STALLED'
+                    : esp32Link === 'CONNECTING'
+                      ? 'CONNECTING'
+                      : esp32Link === 'ERROR'
+                        ? 'LINK ERROR'
+                        : usbLive
+                          ? 'USB LIVE'
+                          : 'OFF'}
               </Badge>
-              {cameraIsDemo ? <Badge tone="warn">synthetic</Badge> : null}
+              {esp32Dropped > 0 ? <Badge tone="warn">{esp32Dropped} dropped</Badge> : null}
             </>
           }
         />
@@ -134,55 +194,106 @@ export function MachineVision() {
           <CameraView videoRef={videoRef} demoCanvasRef={demoRef} />
         </div>
         <FrameFooter className="justify-between">
-          <div className="flex items-center gap-1.5">
-            {live ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {esp32Live ? (
               <>
                 <Button size="xs" variant="secondary" icon={<Camera size={10} />} onClick={grab}>
                   Capture frame
                 </Button>
-                <Button size="xs" variant="ghost" icon={<CameraOff size={10} />} onClick={stopCamera}>
-                  Stop camera
+                <Button size="xs" variant="ghost" icon={<Link2 size={10} />} onClick={disconnectEsp32}>
+                  Disconnect
                 </Button>
                 <Button
                   size="xs"
                   variant="ghost"
                   icon={<RefreshCw size={10} />}
-                  onClick={() => void startCamera(cameraDeviceId)}
-                  title="Re-open the stream"
+                  onClick={() => void connectEsp32()}
+                  title="Reconnect to the module"
                 >
-                  Restart
+                  Reconnect
                 </Button>
               </>
             ) : (
-              <Button
-                size="xs"
-                variant="primary"
-                icon={<Video size={10} />}
-                onClick={() => void startCamera()}
-                disabled={!supported}
-              >
-                Start camera
-              </Button>
+              <>
+                <Button
+                  size="xs"
+                  variant="primary"
+                  icon={<Cpu size={10} />}
+                  onClick={() => void connectEsp32()}
+                  disabled={esp32Link === 'CONNECTING'}
+                >
+                  {esp32Link === 'CONNECTING' ? 'Connecting…' : 'Connect module'}
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  icon={<Video size={10} />}
+                  onClick={() => void startCamera()}
+                  disabled={!supported}
+                  title="Use a camera attached to this computer instead"
+                >
+                  USB camera
+                </Button>
+              </>
             )}
-            {cameraDevices.length > 1 ? (
-              <Select
-                value={cameraDeviceId ?? ''}
-                onChange={(e) => selectCamera(e.target.value || null)}
-                className="h-6 max-w-[150px] text-[10px]"
-              >
-                {cameraDevices.map((d, i) => (
-                  <option key={d.deviceId || i} value={d.deviceId}>
-                    {d.label}
-                  </option>
-                ))}
-              </Select>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowConfig((v) => !v)}
+              className="inline-flex h-6 items-center gap-1 rounded-full border border-line bg-white/[0.03] px-2 text-[9.5px] text-ink-dim transition-colors hover:text-ink"
+            >
+              <Wifi size={9} /> {esp32Config.host}
+            </button>
           </div>
           <span className="flex items-center gap-1.5 text-[9.5px] text-ink-dim">
-            <StatusDot tone={live ? 'ok' : 'neutral'} pulse={live} />
-            {demoFeed ? 'demo camera' : live ? 'device streaming' : cameraDevices.length === 0 ? 'no video input' : `${cameraDevices.length} input(s)`}
+            <StatusDot tone={esp32Link === 'STREAMING' ? 'ok' : 'neutral'} pulse={esp32Link === 'STREAMING'} />
+            {esp32Live ? `${esp32Frames} frames` : usbLive ? 'device streaming' : 'idle'}
           </span>
         </FrameFooter>
+
+        {showConfig ? (
+          <div className="shrink-0 border-t border-white/[0.06] px-3 py-2">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <Field label="Module host">
+                <TextInput
+                  value={esp32Config.host}
+                  onChange={(e) => updateEsp32Config({ host: e.target.value })}
+                  placeholder="192.168.4.1"
+                  className="h-7 text-[10.5px]"
+                />
+              </Field>
+              <Field label="Port">
+                <NumberInput
+                  value={esp32Config.port}
+                  onChange={(e) => updateEsp32Config({ port: Number(e.target.value) })}
+                  className="h-7 text-[10.5px]"
+                />
+              </Field>
+              <Field label="Transport">
+                <Segmented
+                  size="xs"
+                  value={esp32Config.mode}
+                  onChange={(mode) => updateEsp32Config({ mode })}
+                  options={[
+                    { value: 'websocket', label: 'WebSocket' },
+                    { value: 'mjpeg', label: 'MJPEG' },
+                  ]}
+                />
+              </Field>
+              <Field label="Stream path">
+                <TextInput
+                  value={esp32Config.path}
+                  onChange={(e) => updateEsp32Config({ path: e.target.value })}
+                  placeholder="/stream"
+                  className="h-7 text-[10.5px]"
+                />
+              </Field>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[9px] text-ink-dim">
+              <span className="tabular">{esp32Url(esp32Config)}</span>
+              <span className="text-ink-dim/60">WebSocket carries the detector reading with each frame; MJPEG is picture only.</span>
+            </div>
+          </div>
+        ) : null}
       </Frame>
 
       {/* ---------------- 3D reconstruction ---------------- */}
@@ -191,7 +302,7 @@ export function MachineVision() {
           title="3D reconstruction"
           subtitle={
             scan
-              ? `${scan.is_demo ? 'DEMO · ' : ''}${scan.board_width_mm} × ${scan.board_height_mm} mm · frame as texture`
+              ? `${scan.is_demo ? 'DEMO · ' : ''}${scan.board_width_mm} × ${scan.board_height_mm} mm · module frame as texture`
               : 'board geometry from the scan'
           }
           icon={<Box size={13} />}
@@ -204,7 +315,7 @@ export function MachineVision() {
           <span className="flex items-center gap-1.5 text-[10px] text-ink-dim">
             <Layers size={10} />
             {scanMeasurements.length > 0
-              ? `${summary?.measuredCells ?? 0} measured cells draped over the frame`
+              ? `${summary?.measuredCells ?? 0} measured cells draped over the board`
               : 'no readings yet — board shown as a wireframe'}
           </span>
           <button
@@ -215,68 +326,110 @@ export function MachineVision() {
             {cameraOverlay === 'SURFACE' ? 'hide field' : 'show field'}
           </button>
         </FrameFooter>
+        {/* Off-screen surface for the demo module feed. */}
+        <canvas ref={demoModuleRef} width={640} height={480} className="hidden" aria-hidden />
       </Frame>
 
       {/* ---------------- right rail ---------------- */}
       <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-2.5 max-xl:grid-rows-none xl:row-span-2">
         <Frame className="shrink-0">
-          <FrameHeader title="Camera" subtitle="browser video input" icon={<Radio size={12} />} />
+          <FrameHeader title="Module" subtitle="ESP32-CAM link" icon={<Radio size={12} />} />
           <FrameBody className="p-2.5">
-            {!supported ? (
-              <p className="text-[9.5px] leading-relaxed text-elevated">
-                This browser exposes no video capture API. Use Chromium on https or localhost.
-              </p>
-            ) : null}
-            <KeyValue label="State" value={live ? 'streaming' : demoFeed ? 'demo feed' : cameraStatus.toLowerCase()} />
-            <KeyValue label="Resolution" value={cameraInfo.width ? `${cameraInfo.width} × ${cameraInfo.height}` : '—'} mono />
-            <KeyValue label="Delivered" value={live ? `${cameraFps || Math.round(cameraInfo.frameRate ?? 0)} fps` : '—'} mono />
-            <KeyValue label="Device" value={cameraInfo.deviceId === 'DEMO-CAM-01' ? 'demo-cam-01' : (cameraDeviceId || 'default')} mono />
-            <KeyValue label="Frames kept" value={`${cameraCaptures.length} / 12`} mono />
-            {cameraError ? (
-              <>
-                <Divider className="my-1.5" />
-                <p className="text-[9px] leading-snug text-elevated">{cameraError}</p>
-              </>
-            ) : null}
-            {cameraNotice && !cameraError ? (
-              <>
-                <Divider className="my-1.5" />
-                <p className="text-[9px] leading-snug text-ink-dim">{cameraNotice}</p>
-              </>
-            ) : null}
+            <KeyValue
+              label="Link"
+              value={
+                esp32Link === 'STREAMING'
+                  ? 'streaming'
+                  : esp32Link === 'STALLED'
+                    ? 'stalled'
+                    : esp32Link.toLowerCase()
+              }
+            />
+            <KeyValue label="Frames" value={esp32Frames.toLocaleString('en-US')} mono />
+            <KeyValue
+              label="Delivered"
+              value={esp32Live && esp32Frame ? `${esp32Frame.fps.toFixed(1)} fps` : '—'}
+              mono
+            />
+            <KeyValue
+              label="Resolution"
+              value={esp32Frame?.width ? `${esp32Frame.width} × ${esp32Frame.height}` : '—'}
+              mono
+            />
+            <KeyValue
+              label="Frame size"
+              value={esp32Frame ? `${(esp32Frame.bytes / 1024).toFixed(1)} kB` : '—'}
+              mono
+            />
+            <KeyValue
+              label="Arrival"
+              value={arrival.median > 0 ? `${Math.round(arrival.median)} ms median` : '—'}
+              mono
+            />
+            <KeyValue
+              label="Jitter p95"
+              value={arrival.p95 > 0 ? `${Math.round(arrival.p95)} ms` : '—'}
+              mono
+            />
+            <KeyValue label="Dropped" value={String(esp32Dropped)} mono />
             <Divider className="my-1.5" />
-            <Button
-              size="xs"
-              variant="ghost"
-              icon={<RefreshCw size={9} />}
-              block
-              onClick={() => {
-                void refreshCameras()
-                setLinkNote(`${cameraDevices.length} video input(s) reported by the browser.`)
-              }}
-            >
-              Rescan devices
-            </Button>
-            {linkNote ? <p className="mt-1 text-[9px] text-ink-dim">{linkNote}</p> : null}
+            <div className="flex items-center gap-1.5">
+              <span className={cn('flex items-center gap-1 text-[9.5px]', esp32Live ? 'text-green' : 'text-ink-dim')}>
+                {esp32Live ? <Wifi size={9} /> : <WifiOff size={9} />}
+                {esp32Url(esp32Config)}
+              </span>
+            </div>
+            {esp32Error ? (
+              <>
+                <Divider className="my-1.5" />
+                <p className="text-[9px] leading-snug text-elevated">{esp32Error}</p>
+              </>
+            ) : null}
+            {Object.keys(esp32Meta).length > 0 ? (
+              <>
+                <Divider className="my-1.5" />
+                <div className="space-y-0.5">
+                  {Object.entries(esp32Meta)
+                    .filter(([key]) => !['seq', 'bytes', 'uptime_ms'].includes(key))
+                    .slice(0, 6)
+                    .map(([key, value]) => (
+                      <KeyValue key={key} label={key} value={String(value)} mono />
+                    ))}
+                </div>
+              </>
+            ) : null}
           </FrameBody>
         </Frame>
 
         <Frame className="shrink-0">
-          <FrameHeader title="Machine link" subtitle="what the view is showing" />
-          <div className="space-y-0.5 p-2.5">
-            <KeyValue
-              label="Detector"
-              value={deviceState === 'CONNECTED' ? (signalState === 'UNKNOWN' ? 'connected' : signalState.toLowerCase()) : 'offline'}
-            />
-            <KeyValue label="Probe" value={scan ? probeLabel(scan.probe_type) : '—'} />
-            <KeyValue label="Scan" value={scan ? scan.scan_name : 'none'} />
-            <KeyValue label="Readings" value={String(scanMeasurements.length)} mono />
-            <KeyValue
-              label="Peak"
-              value={summary?.max ? `${formatNumber(summary.max.signal_raw)} ${settings.acquisition.unit}` : '—'}
-              mono
-            />
-            <KeyValue label="Last frame" value={formatTime(scanMeasurements[0]?.timestamp ?? null)} mono />
+          <FrameHeader title="Stream health" subtitle="measured from arriving frames" icon={<Gauge size={12} />} />
+          <div className="space-y-2 p-2.5">
+            <div>
+              <div className="flex items-center justify-between text-[9.5px] text-ink-dim">
+                <span>delivery rate</span>
+                <span className="tabular text-ink-muted">
+                  {esp32Frame ? `${esp32Frame.fps.toFixed(1)} fps` : '—'}
+                </span>
+              </div>
+              <Sparkline values={fpsSeries} color="#35e5c5" height={26} />
+            </div>
+            <div>
+              <div className="flex items-center justify-between text-[9.5px] text-ink-dim">
+                <span>frame size</span>
+                <span className="tabular text-ink-muted">
+                  {esp32Frame ? `${(esp32Frame.bytes / 1024).toFixed(1)} kB` : '—'}
+                </span>
+              </div>
+              <Sparkline values={byteSeries} color="#6aa8ff" height={26} />
+            </div>
+            <div className="flex items-center justify-between gap-2 text-[9px] text-ink-dim">
+              <span className="flex items-center gap-1">
+                <Waves size={9} /> jitter p95 {arrival.p95 > 0 ? `${Math.round(arrival.p95)} ms` : '—'}
+              </span>
+              <span className="flex items-center gap-1">
+                <Activity size={9} /> {esp32History.length} samples
+              </span>
+            </div>
           </div>
         </Frame>
 
@@ -305,7 +458,11 @@ export function MachineVision() {
                     key={capture.capture_id}
                     className="group relative overflow-hidden rounded-[6px] border border-line bg-black/40"
                   >
-                    <img src={capture.data_url} alt={`Captured frame ${formatDateTime(capture.at)}`} className="block aspect-video w-full object-cover" />
+                    <img
+                      src={capture.data_url}
+                      alt={`Captured frame ${formatDateTime(capture.at)}`}
+                      className="block aspect-video w-full object-cover"
+                    />
                     <div className="flex items-center justify-between px-1 py-0.5 text-[8.5px] text-ink-dim">
                       <span className="tabular">{formatTime(capture.at)}</span>
                       <span className="flex items-center gap-1">
@@ -336,41 +493,66 @@ export function MachineVision() {
         </Frame>
       </div>
 
-      {/* ---------------- bottom strip: alignment + honest notes ---------------- */}
-      <Frame className="min-h-[180px] xl:col-span-2 xl:min-h-0">
+      {/* ---------------- bottom: operator camera + alignment notes ---------------- */}
+      <Frame className="min-h-[190px] xl:col-span-2 xl:min-h-0">
         <FrameHeader
-          title="View alignment"
-          subtitle="how the frame is mapped onto the board"
-          icon={<Crosshair size={13} />}
+          title="Operator camera"
+          subtitle="browser video input · fallback when no module is attached"
+          icon={<Video size={13} />}
           right={
-            <Segmented
-              size="xs"
-              value={cameraOverlay}
-              onChange={(v) => setCameraOverlay(v)}
-              options={[
-                { value: 'SURFACE', label: 'Field overlay' },
-                { value: 'OFF', label: 'Board only' },
-              ]}
-            />
+            <>
+              {usbLive ? (
+                <>
+                  <Button size="xs" variant="ghost" icon={<CameraOff size={10} />} onClick={stopCamera}>
+                    Stop
+                  </Button>
+                  <Badge tone="ok" dot>
+                    LIVE
+                  </Badge>
+                </>
+              ) : (
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  icon={<Plug size={10} />}
+                  onClick={() => void startCamera()}
+                  disabled={!supported || esp32Live}
+                  title={esp32Live ? 'The module is supplying the picture' : 'Open a camera attached to this computer'}
+                >
+                  Use camera
+                </Button>
+              )}
+              {cameraDevices.length > 1 ? (
+                <Select
+                  value={cameraDeviceId ?? ''}
+                  onChange={(e) => selectCamera(e.target.value || null)}
+                  className="h-6 max-w-[130px] text-[10px]"
+                >
+                  {cameraDevices.map((d, i) => (
+                    <option key={d.deviceId || i} value={d.deviceId}>
+                      {d.label}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+            </>
           }
         />
         <div className="grid min-h-0 flex-1 grid-cols-3 gap-2 px-3 pb-2 max-lg:grid-cols-1">
           {[
             {
-              title: '1 · Frame',
-              body: live
-                ? 'The live stream is sampled into the projection. Rotate the view to check the board sits square in frame.'
-                : demoFeed
-                  ? 'Demo Mode paints a synthetic board. Same projection code runs, but the picture is not a camera.'
-                  : 'No stream open. The board below is drawn from the scan geometry alone — nothing is invented.',
+              title: '1 · Module',
+              body: esp32Live
+                ? 'The ESP32-CAM streams JPEG frames and the detector reading that was live for each one. Arrival rate and jitter above are measured from those frames.'
+                : 'Enter the module address and press Connect. Frames are bursty on Wi-Fi, so the viewfinder buffers a few and plays them at a constant cadence — no frame is invented.',
             },
             {
               title: '2 · Texture',
-              body: 'The board rectangle of the frame becomes the texture of a plane sized by the scan (mm). “Board crop” uses the centred region, “full frame” uses all of it.',
+              body: 'The board rectangle of the frame becomes the texture of the scan-sized plane. “Board crop” uses the centred region, “full frame” uses all of it.',
             },
             {
               title: '3 · Field',
-              body: 'Measured cells are interpolated (IDW) into a sheet and draped over that plane. Only measured cells are data; the rest is marked as derived in every export.',
+              body: 'Measured cells are interpolated (IDW) into a lit surface and draped over the board. Only measured cells are data; interpolation is derived and excluded from exports.',
             },
           ].map((step) => (
             <div key={step.title} className="rounded-[7px] border border-white/[0.06] bg-white/[0.015] px-2.5 py-2">
@@ -382,14 +564,20 @@ export function MachineVision() {
         <FrameFooter className="justify-between">
           <span className={cn('flex items-center gap-1.5 text-[9.5px]', demoMode ? 'text-elevated' : 'text-ink-dim')}>
             {demoMode
-              ? 'Demo Mode is on — the camera picture and the field both come from the demo module.'
-              : 'Camera picture is real. Field values come only from captured measurements.'}
+              ? 'Demo Mode is on — the picture and the field both come from the demo module.'
+              : 'Module picture is real. Field values come only from captured measurements.'}
           </span>
-          <span className="text-[9.5px] text-ink-dim">frames never leave this browser</span>
+          <span className="flex items-center gap-1.5 text-[9.5px] text-ink-dim">
+            <Crosshair size={9} />
+            {deviceState === 'CONNECTED'
+              ? `detector ${signalState.toLowerCase()} · ${samples.length} frames buffered`
+              : 'detector offline'}
+            {' · '}
+            {scan ? probeLabel(scan.probe_type) : 'no probe'} ·{' '}
+            {summary?.max ? `peak ${formatNumber(summary.max.signal_raw)} ${settings.acquisition.unit}` : 'no peak yet'}
+          </span>
         </FrameFooter>
       </Frame>
-
     </div>
   )
 }
-
