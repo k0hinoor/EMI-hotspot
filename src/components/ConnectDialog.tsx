@@ -55,12 +55,12 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 p-4 sm:items-center">
       <div className="absolute inset-0" onClick={onClose} aria-hidden />
-      <div className="relative z-10 w-full max-w-[560px] rounded-[12px] border border-line bg-panel shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-line-soft px-4 py-3">
+      <div className="relative z-10 w-full max-w-[560px] rounded-[16px] border border-white/10 bg-[#0b0e16]/95 shadow-[0_32px_90px_-30px_rgba(0,0,0,0.95)] backdrop-blur-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-white/[0.06] px-4 py-3">
           <div>
             <div className="flex items-center gap-2">
-              <Usb size={15} className="text-accent" />
-              <h2 className="text-[12.5px] font-medium text-ink">Device connection</h2>
+              <Usb size={15} className="text-teal" />
+              <h2 className="text-[14px] font-medium text-ink">Device connection</h2>
               <Badge tone={connected ? 'ok' : deviceState === 'ERROR' ? 'danger' : 'neutral'} dot>
                 {deviceState}
               </Badge>
@@ -73,7 +73,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-ink-dim hover:bg-panel-raised hover:text-ink"
+            className="rounded-lg p-1 text-ink-dim hover:bg-white/[0.06] hover:text-ink"
           >
             <X size={15} />
           </button>
@@ -113,7 +113,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
           ) : null}
 
           {!connected ? (
-            <ol className="grid gap-1.5 rounded-[10px] border border-line bg-canvas px-3 py-2.5">
+            <ol className="grid gap-1.5 rounded-[10px] border border-white/[0.07] bg-black/30 px-3 py-2.5">
               {[
                 ['Flash the firmware', 'Upload firmware/emi_hotspot_serial.ino — it streams one JSON frame per line at 115200 baud.'],
                 ['Fit the probe', 'Connect the E-field or H-field probe to the detector input and match the probe type on the device.'],
@@ -162,7 +162,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
               </div>
             </Field>
             <Field label="Baud rate">
-              <div className="flex h-9 items-center rounded-lg border border-line bg-canvas px-2.5 font-mono text-[12px] text-ink-muted">
+              <div className="flex h-9 items-center rounded-lg border border-line bg-black/25 px-2.5 font-mono text-[12px] text-ink-muted">
                 {settings.baud_rate.toLocaleString('en-US')} · 8N1
               </div>
             </Field>
@@ -209,8 +209,8 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
             <Readback label="Opened" value={session.connected_at ? formatDateTime(session.connected_at) : '—'} />
           </div>
 
-          <div className="rounded-[10px] border border-line bg-canvas">
-            <div className="flex items-center gap-2 border-b border-line-soft px-3 py-2">
+          <div className="rounded-[10px] border border-white/[0.07] bg-black/30">
+            <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2">
               <Terminal size={12} className="text-ink-dim" />
               <span className="text-[11px] font-medium text-ink-muted">Link log</span>
               <span className="ml-auto text-[10px] text-ink-dim">newest first · raw frames</span>
@@ -230,7 +230,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
                           : entry.direction === 'OUT'
                             ? 'text-efield'
                             : entry.direction === 'SYS'
-                              ? 'text-accent'
+                              ? 'text-teal'
                               : 'text-normal',
                       )}
                     >
@@ -254,7 +254,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-line-soft px-4 py-2.5">
+        <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] px-4 py-2.5">
           <div className="flex items-center gap-2 text-[10.5px] text-ink-dim">
             <StatusDot tone={connected ? 'ok' : 'neutral'} />
             {connected ? 'Streaming' : 'Link idle'}

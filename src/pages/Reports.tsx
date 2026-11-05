@@ -207,7 +207,7 @@ export function Reports() {
                   {preview.map((cell) => (
                     <span
                       key={cell.label}
-                      className="rounded-[4px] border border-line bg-canvas px-1 py-[1px] font-mono text-[9.5px] text-ink-muted"
+                      className="rounded-[4px] border border-line bg-black/25 px-1 py-[1px] font-mono text-[9.5px] text-ink-muted"
                     >
                       {cell.label}
                       <span className="ml-1 text-ink">{cell.value}</span>

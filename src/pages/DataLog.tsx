@@ -118,7 +118,7 @@ export function DataLog() {
         />
 
         {/* Filter bar */}
-        <div className="shrink-0 space-y-1.5 border-b border-line-soft px-2 py-1.5">
+        <div className="shrink-0 space-y-1.5 border-b border-white/[0.06] px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-1.5">
             <div className="relative min-w-[150px] flex-1">
               <Search size={11} className="absolute top-1/2 left-2 -translate-y-1/2 text-ink-dim" />
@@ -173,7 +173,7 @@ export function DataLog() {
               <button
                 type="button"
                 onClick={resetFilters}
-                className="inline-flex items-center gap-1 text-[9.5px] text-accent hover:underline"
+                className="inline-flex items-center gap-1 text-[9.5px] text-teal hover:underline"
               >
                 <X size={9} /> reset
               </button>
@@ -198,8 +198,8 @@ export function DataLog() {
             </div>
           ) : (
             <table className="w-full border-collapse text-[10.5px]">
-              <thead className="sticky top-0 z-10 bg-panel">
-                <tr className="border-b border-line-soft text-left">
+              <thead className="sticky top-0 z-10 bg-white/[0.03]">
+                <tr className="border-b border-white/[0.06] text-left">
                   <th className="w-6 px-2 py-1.5">
                     <input
                       type="checkbox"
@@ -222,8 +222,8 @@ export function DataLog() {
                     key={m.measurement_id}
                     onClick={() => setDetail(m)}
                     className={cn(
-                      'cursor-pointer border-b border-line-soft/50 transition-colors hover:bg-panel-raised/60',
-                      detail?.measurement_id === m.measurement_id && 'bg-panel-raised',
+                      'cursor-pointer border-b border-white/[0.06]/50 transition-colors hover:bg-white/[0.06]/60',
+                      detail?.measurement_id === m.measurement_id && 'bg-white/[0.06]',
                     )}
                   >
                     <td className="px-2 py-1" onClick={(e) => e.stopPropagation()}>

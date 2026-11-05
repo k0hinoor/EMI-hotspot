@@ -23,7 +23,7 @@ export function ToastStack() {
           <div
             key={toast.id}
             className={cn(
-              'pointer-events-auto flex items-start gap-2.5 rounded-[8px] border bg-panel/97 px-2.5 py-2 shadow-2xl backdrop-blur',
+              'pointer-events-auto flex items-start gap-2.5 rounded-[12px] border bg-[#0b0e16]/95 px-3 py-2.5 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.9)] backdrop-blur-xl',
               style.ring,
             )}
           >

@@ -20,9 +20,14 @@ capability reads the live serial stream or records already captured from it.
 
 ## Navigation — page by page, never one long scroll
 
-Seven frames, switched from the top bar (or number keys `1`–`7`):
+Eight frames in the sidebar (or number keys `1`–`8`):
 
-`1` Live Scan · `2` Heatmap · `3` Analysis · `4` Data Log · `5` Reports · `6` Calibration · `7` Settings
+`1` Dashboard · `2` Live Scan · `3` Heatmaps · `4` Analytics · `5` Data Log · `6` Reports · `7` Calibration · `8` Settings
+
+**Dashboard** is the overview frame: 3D topology surface, reading-quality donut, animated signal
+anomaly deltas, per-column signal profile and capture-activity bars. Every panel is fed by the live
+frame buffer or stored measurements — with no device it shows labelled empty states instead of
+placeholder data.
 
 Each page fills the viewport: panels are fixed-height and scroll internally, so the dashboard never
 turns into a long document. Deep links work (hash routes), and the status rail stays visible on

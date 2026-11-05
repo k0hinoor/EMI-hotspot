@@ -162,12 +162,13 @@ export function generateReport(input: ReportInput): { report: Report; pdf: jsPDF
   for (let i = 0; i < legendWidth; i++) {
     const t = i / legendWidth
     const stopsArr: [number, [number, number, number]][] = [
-      [0, [22, 24, 28]],
-      [0.22, [42, 76, 96]],
-      [0.42, [76, 194, 255]],
-      [0.62, [185, 139, 255]],
-      [0.82, [240, 160, 60]],
-      [1, [242, 85, 90]],
+      [0, [26, 42, 92]],
+      [0.18, [38, 88, 176]],
+      [0.38, [53, 229, 197]],
+      [0.56, [122, 226, 120]],
+      [0.74, [246, 222, 84]],
+      [0.88, [247, 168, 75]],
+      [1, [255, 90, 110]],
     ]
     let rgb = stopsArr[0][1]
     for (let s = 1; s < stopsArr.length; s++) {

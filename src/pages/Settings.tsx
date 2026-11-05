@@ -299,7 +299,7 @@ export function Settings() {
                           : entry.direction === 'OUT'
                             ? 'text-efield'
                             : entry.direction === 'SYS'
-                              ? 'text-accent'
+                              ? 'text-teal'
                               : 'text-normal',
                       )}
                     >
@@ -340,7 +340,7 @@ export function Settings() {
         <Frame className="min-h-0">
           <FrameHeader title="Wire protocol" subtitle="line-oriented JSON · protocol v1" icon={<Activity size={12} />} />
           <FrameBody className="p-2.5">
-            <pre className="overflow-x-auto rounded-[6px] border border-line bg-canvas px-2 py-1.5 font-mono text-[9px] leading-relaxed text-ink-muted">
+            <pre className="overflow-x-auto rounded-[6px] border border-line bg-black/25 px-2 py-1.5 font-mono text-[9px] leading-relaxed text-ink-muted">
 {`#HELLO {"device_id":"EMI-001","firmware_version":"1.0.0",
          "protocol_version":1,"probe_type":"E_FIELD"}
 

@@ -28,7 +28,7 @@ export function FrameHeader({
   subtitle,
   right,
   icon,
-  divider = true,
+  divider = false,
 }: {
   title: ReactNode
   subtitle?: ReactNode
@@ -39,16 +39,16 @@ export function FrameHeader({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-between gap-3 px-3 py-2',
-        divider && 'border-b border-line-soft',
+        'flex shrink-0 items-start justify-between gap-3 px-4 pt-3.5 pb-2',
+        divider && 'border-b border-white/[0.06]',
       )}
     >
       <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          {icon ? <span className="text-ink-dim">{icon}</span> : null}
-          <h2 className="truncate text-[11.5px] font-medium tracking-tight text-ink">{title}</h2>
+        <div className="flex items-center gap-2">
+          {icon ? <span className="text-teal/80">{icon}</span> : null}
+          <h2 className="card-title truncate">{title}</h2>
         </div>
-        {subtitle ? <p className="mt-0.5 truncate text-[10px] leading-tight text-ink-dim">{subtitle}</p> : null}
+        {subtitle ? <p className="mt-1 truncate text-[10.5px] leading-tight text-ink-dim">{subtitle}</p> : null}
       </div>
       {right ? <div className="flex shrink-0 items-center gap-1.5">{right}</div> : null}
     </div>
@@ -60,13 +60,13 @@ export const Panel = Frame
 export const PanelHeader = FrameHeader
 
 export function FrameBody({ children, className, noPad }: { children: ReactNode; className?: string; noPad?: boolean }) {
-  return <div className={cn('frame-body', !noPad && 'p-3', className)}>{children}</div>
+  return <div className={cn('frame-body', !noPad && 'px-4 pb-3.5', className)}>{children}</div>
 }
 
 /** Footer strip for a frame — fixed, never scrolls away. */
 export function FrameFooter({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('flex shrink-0 items-center gap-2 border-t border-line-soft px-3 py-2', className)}>
+    <div className={cn('flex shrink-0 items-center gap-2 border-t border-white/[0.06] px-4 py-2.5', className)}>
       {children}
     </div>
   )
@@ -97,23 +97,33 @@ export function Metric({
 }) {
   const toneClass = {
     default: 'text-ink',
-    accent: 'text-accent',
+    accent: 'text-teal',
     dim: 'text-ink-dim',
     warn: 'text-elevated',
     danger: 'text-strong',
-    ok: 'text-normal',
+    ok: 'text-green',
     e: 'text-efield',
     h: 'text-hfield',
   }[tone]
-  const sizeClass = { xs: 'text-[15px]', sm: 'text-[18px]', md: 'text-[23px]', lg: 'text-[36px]' }[size]
+  const glow = {
+    default: '',
+    accent: 'drop-shadow-[0_0_14px_rgba(53,229,197,0.45)]',
+    dim: '',
+    warn: 'drop-shadow-[0_0_14px_rgba(247,168,75,0.4)]',
+    danger: 'drop-shadow-[0_0_14px_rgba(255,111,139,0.4)]',
+    ok: 'drop-shadow-[0_0_14px_rgba(61,220,151,0.4)]',
+    e: 'drop-shadow-[0_0_14px_rgba(106,168,255,0.4)]',
+    h: 'drop-shadow-[0_0_14px_rgba(167,139,250,0.4)]',
+  }[tone]
+  const sizeClass = { xs: 'text-[16px]', sm: 'text-[20px]', md: 'text-[26px]', lg: 'text-[40px]' }[size]
   return (
     <div className={cn('min-w-0', className)}>
       <div className="label-caps truncate">{label}</div>
       <div className="mt-1 flex items-baseline gap-1">
-        <span className={cn('tabular leading-none font-medium', sizeClass, toneClass)}>{value}</span>
-        {unit ? <span className="truncate text-[9.5px] text-ink-dim">{unit}</span> : null}
+        <span className={cn('tabular leading-none font-medium tracking-tight', sizeClass, toneClass, glow)}>{value}</span>
+        {unit ? <span className="truncate text-[10px] text-ink-dim">{unit}</span> : null}
       </div>
-      {hint ? <div className="mt-1 truncate text-[9.5px] leading-tight text-ink-dim">{hint}</div> : null}
+      {hint ? <div className="mt-1.5 truncate text-[10px] leading-tight text-ink-dim">{hint}</div> : null}
     </div>
   )
 }
@@ -132,14 +142,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ) {
   const base =
-    'inline-flex items-center justify-center gap-1.5 rounded-[7px] border font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 whitespace-nowrap'
+    'inline-flex items-center justify-center gap-1.5 rounded-[9px] border font-medium transition-all disabled:cursor-not-allowed disabled:opacity-35 whitespace-nowrap'
   const variants = {
-    primary: 'border-transparent bg-accent text-accent-ink hover:bg-[#f0ece3]',
-    secondary: 'border-line bg-panel-raised text-ink hover:border-[#31353c] hover:bg-[#1c2026]',
-    ghost: 'border-transparent bg-transparent text-ink-muted hover:bg-panel-raised hover:text-ink',
-    danger: 'border-strong/35 bg-strong/10 text-strong hover:bg-strong/16',
+    primary:
+      'border-teal/50 bg-teal/15 text-teal hover:bg-teal/25 shadow-[0_0_20px_-8px_rgba(53,229,197,0.7)]',
+    secondary: 'border-line bg-white/[0.04] text-ink hover:border-white/20 hover:bg-white/[0.07]',
+    ghost: 'border-transparent bg-transparent text-ink-muted hover:bg-white/[0.05] hover:text-ink',
+    danger: 'border-strong/40 bg-strong/12 text-strong hover:bg-strong/20',
   }
-  const sizes = { xs: 'h-6 px-2 text-[10px]', sm: 'h-7 px-2.5 text-[11px]', md: 'h-8 px-3 text-[11.5px]' }
+  const sizes = { xs: 'h-6 px-2 text-[10px]', sm: 'h-7 px-2.5 text-[11px]', md: 'h-8 px-3.5 text-[11.5px]' }
   return (
     <button ref={ref} className={cn(base, variants[variant], sizes[size], block && 'w-full', className)} {...rest}>
       {icon}
@@ -149,7 +160,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 })
 
 const fieldClass =
-  'h-7 w-full rounded-[6px] border border-line bg-canvas px-2 text-[11.5px] text-ink outline-none transition-colors placeholder:text-ink-dim/70 hover:border-[#31353c] focus:border-accent/45 disabled:opacity-40'
+  'h-7 w-full rounded-[8px] border border-line bg-[#080b12]/80 px-2.5 text-[11.5px] text-ink outline-none transition-colors placeholder:text-ink-dim/70 hover:border-white/15 focus:border-teal/50 disabled:opacity-40'
 
 export function TextInput({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(fieldClass, className)} {...rest} />
@@ -215,14 +226,14 @@ export function Switch({
         onClick={() => onChange(!checked)}
         className={cn(
           'relative mt-0.5 h-4 w-7 shrink-0 rounded-full border transition-colors',
-          checked ? 'border-accent/40 bg-accent/85' : 'border-line bg-canvas',
+          checked ? 'border-teal/50 bg-teal/85' : 'border-line bg-black/25',
           disabled && 'opacity-40',
         )}
       >
         <span
           className={cn(
             'absolute top-[3px] h-2.5 w-2.5 rounded-full transition-all',
-            checked ? 'left-[15px] bg-accent-ink' : 'left-[3px] bg-ink-dim',
+            checked ? 'left-[15px] bg-teal-ink' : 'left-[3px] bg-ink-dim',
           )}
         />
       </button>
@@ -233,13 +244,13 @@ export function Switch({
 /* ---------------------------------- badges -------------------------------- */
 
 const toneMap = {
-  ok: 'border-normal/30 bg-normal/8 text-normal',
-  warn: 'border-elevated/30 bg-elevated/8 text-elevated',
-  danger: 'border-strong/30 bg-strong/8 text-strong',
-  neutral: 'border-line bg-panel-raised text-ink-muted',
-  accent: 'border-accent/25 bg-accent/8 text-accent',
-  efield: 'border-efield/30 bg-efield/8 text-efield',
-  hfield: 'border-hfield/30 bg-hfield/8 text-hfield',
+  ok: 'border-normal/35 bg-normal/12 text-normal',
+  warn: 'border-elevated/35 bg-elevated/12 text-elevated',
+  danger: 'border-strong/35 bg-strong/12 text-strong',
+  neutral: 'border-line bg-white/[0.05] text-ink-muted',
+  accent: 'border-teal/30 bg-teal/10 text-teal',
+  efield: 'border-efield/35 bg-efield/12 text-efield',
+  hfield: 'border-hfield/35 bg-hfield/12 text-hfield',
 } as const
 
 export type Tone = keyof typeof toneMap
@@ -258,7 +269,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-[4px] border px-1.5 py-[1px] text-[9.5px] font-medium tracking-wide whitespace-nowrap',
+        'inline-flex items-center gap-1 rounded-full border px-2 py-[2px] text-[9.5px] font-medium tracking-wide whitespace-nowrap',
         toneMap[tone],
         className,
       )}
@@ -271,13 +282,13 @@ export function Badge({
 
 export function StatusDot({ tone = 'neutral', pulse }: { tone?: Tone; pulse?: boolean }) {
   const color = {
-    ok: 'bg-normal',
-    warn: 'bg-elevated',
-    danger: 'bg-strong',
+    ok: 'bg-normal shadow-[0_0_8px_2px_rgba(61,220,151,0.45)]',
+    warn: 'bg-elevated shadow-[0_0_8px_2px_rgba(247,168,75,0.4)]',
+    danger: 'bg-strong shadow-[0_0_8px_2px_rgba(255,111,139,0.4)]',
     neutral: 'bg-ink-dim',
-    accent: 'bg-accent',
-    efield: 'bg-efield',
-    hfield: 'bg-hfield',
+    accent: 'bg-teal shadow-[0_0_8px_2px_rgba(53,229,197,0.45)]',
+    efield: 'bg-efield shadow-[0_0_8px_2px_rgba(106,168,255,0.45)]',
+    hfield: 'bg-hfield shadow-[0_0_8px_2px_rgba(167,139,250,0.45)]',
   }[tone]
   return <span className={cn('inline-block h-1.5 w-1.5 shrink-0 rounded-full', color, pulse && 'animate-pulse-soft')} />
 }
@@ -300,7 +311,7 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center rounded-[8px] border border-dashed border-line/70 px-4 text-center',
+        'flex flex-col items-center justify-center rounded-[10px] border border-dashed border-white/10 bg-white/[0.015] px-4 text-center',
         compact ? 'py-5' : 'py-10',
       )}
     >
@@ -330,7 +341,7 @@ export function Segmented<T extends string>({
   className?: string
 }) {
   return (
-    <div className={cn('inline-flex shrink-0 rounded-[6px] border border-line bg-canvas p-0.5', className)}>
+    <div className={cn('inline-flex shrink-0 rounded-full border border-line bg-[#080b12]/80 p-0.5', className)}>
       {options.map((opt) => {
         const active = opt.value === value
         return (
@@ -341,9 +352,9 @@ export function Segmented<T extends string>({
             title={opt.title}
             onClick={() => onChange(opt.value)}
             className={cn(
-              'inline-flex items-center gap-1 rounded-[4px] font-medium transition-colors disabled:opacity-30',
-              size === 'xs' ? 'h-5 px-1.5 text-[9.5px]' : 'h-6 px-2 text-[10.5px]',
-              active ? 'bg-panel-raised text-ink' : 'text-ink-dim hover:text-ink-muted',
+              'inline-flex items-center gap-1 rounded-full font-medium transition-colors disabled:opacity-30',
+              size === 'xs' ? 'h-5 px-2 text-[9.5px]' : 'h-6 px-2.5 text-[10.5px]',
+              active ? 'bg-white/[0.10] text-ink shadow-[0_0_16px_-6px_rgba(53,229,197,0.8)]' : 'text-ink-dim hover:text-ink-muted',
             )}
           >
             {opt.icon}
