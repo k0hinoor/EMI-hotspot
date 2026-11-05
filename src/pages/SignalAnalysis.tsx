@@ -159,7 +159,7 @@ export function SignalAnalysis() {
                 tone={live.window.spreadPct !== null && live.window.spreadPct > cfg.unstable_spread_pct ? 'warn' : 'default'}
               />
             </div>
-            <div className="mt-2 border-t border-line-soft pt-1">
+            <div className="mt-2 border-t border-white/[0.06] pt-1">
               <KeyValue label="Frames in window" value={live.window.count} mono />
               <KeyValue
                 label="Noise floor"
@@ -179,7 +179,7 @@ export function SignalAnalysis() {
               <option value="">Select a scan…</option>
               {scans.map((s) => (
                 <option key={s.scan_id} value={s.scan_id}>
-                  {s.scan_name} · {probeLabel(s.probe_type)}
+                  {s.is_demo ? '[DEMO] ' : ''}{s.scan_name} · {probeLabel(s.probe_type)}
                 </option>
               ))}
             </Select>
@@ -202,7 +202,7 @@ export function SignalAnalysis() {
                   <Metric label="Minimum" value={formatNumber(scanSet.summary.min?.signal_raw ?? null)} unit={cfg.unit} size="xs" />
                   <Metric label="Coverage" value={`${scanSet.summary.coveragePct.toFixed(0)}%`} size="xs" />
                 </div>
-                <div className="border-t border-line-soft pt-1">
+                <div className="border-t border-white/[0.06] pt-1">
                   <KeyValue label="Valid" value={scanSet.summary.valid} mono />
                   <KeyValue label="Unstable" value={scanSet.summary.unstable} mono />
                   <KeyValue label="Saturated" value={scanSet.summary.saturated} mono />
@@ -226,7 +226,7 @@ export function SignalAnalysis() {
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-1.5 border-t border-line-soft pt-2">
+            <div className="flex items-start gap-1.5 border-t border-white/[0.06] pt-2">
               <Info size={11} className="mt-px shrink-0 text-ink-dim" />
               <div>
                 <div className="text-[10.5px] font-medium text-ink-muted">Relative counts, not field strength</div>

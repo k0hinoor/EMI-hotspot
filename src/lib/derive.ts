@@ -141,27 +141,30 @@ export function columnLabel(index: number): string {
 
 /** Colour ramp shared by heatmap, legend and report (PRD §7.2 rendering). */
 const RAMP: [number, [number, number, number]][] = [
-  [0, [22, 24, 28]],
-  [0.22, [42, 76, 96]],
-  [0.42, [76, 194, 255]],
-  [0.62, [185, 139, 255]],
-  [0.82, [240, 160, 60]],
-  [1, [242, 85, 90]],
+  [0, [26, 42, 92]],
+  [0.18, [38, 88, 176]],
+  [0.38, [53, 229, 197]],
+  [0.56, [122, 226, 120]],
+  [0.74, [246, 222, 84]],
+  [0.88, [247, 168, 75]],
+  [1, [255, 90, 110]],
 ]
 
-export function rampColor(t: number, alpha = 1): string {
+export function rampColor(t: number, alpha = 1, light = 1): string {
   const clamped = Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0))
   for (let i = 1; i < RAMP.length; i++) {
     const [stop, to] = RAMP[i]
     const [prevStop, from] = RAMP[i - 1]
     if (clamped <= stop) {
       const f = stop === prevStop ? 0 : (clamped - prevStop) / (stop - prevStop)
-      const rgb = from.map((c, idx) => Math.round(c + (to[idx] - c) * f))
+      const rgb = from.map((c, idx) =>
+        Math.round(Math.min(255, Math.max(0, (c + (to[idx] - c) * f) * light))),
+      )
       return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`
     }
   }
   const last = RAMP[RAMP.length - 1][1]
-  return `rgba(${last[0]}, ${last[1]}, ${last[2]}, ${alpha})`
+  return `rgba(${Math.min(255, last[0] * light)}, ${Math.min(255, last[1] * light)}, ${Math.min(255, last[2] * light)}, ${alpha})`
 }
 
 export function rampGradientCss(): string {

@@ -171,7 +171,7 @@ export function HeatmapPage() {
                 ['2 · Position probe', 'Move to the selected cell; keep height and angle fixed.'],
                 ['3 · Capture', 'Store the live frame against that coordinate.'],
               ].map(([title, body]) => (
-                <div key={title} className="rounded-[7px] border border-line-soft px-2.5 py-2">
+                <div key={title} className="rounded-[7px] border border-white/[0.06] px-2.5 py-2">
                   <div className="text-[10.5px] font-medium text-ink">{title}</div>
                   <p className="mt-0.5 text-[9.5px] leading-snug text-ink-dim">{body}</p>
                 </div>
@@ -194,6 +194,7 @@ export function HeatmapPage() {
             subtitle={scan.scan_id}
             right={
               <>
+                {scan.is_demo ? <Badge tone="warn">DEMO</Badge> : null}
                 <Badge tone={scan.status === 'COMPLETED' ? 'ok' : scan.status === 'ACTIVE' ? 'accent' : 'warn'}>
                   {scan.status}
                 </Badge>
@@ -209,7 +210,7 @@ export function HeatmapPage() {
             >
               {scans.map((s) => (
                 <option key={s.scan_id} value={s.scan_id}>
-                  {s.scan_name} · {s.scan_id}
+                  {s.is_demo ? '[DEMO] ' : ''}{s.scan_name} · {s.scan_id}
                 </option>
               ))}
             </Select>
@@ -272,7 +273,7 @@ export function HeatmapPage() {
               <span className="tabular text-[16px] text-ink">{summary!.measuredCells}</span>
               <span className="text-[9.5px] text-ink-dim">of {summary!.totalCells} cells</span>
             </div>
-            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-canvas">
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-black/25">
               <div
                 className="h-full rounded-full bg-efield/80 transition-[width]"
                 style={{ width: `${Math.min(100, summary!.coveragePct)}%` }}
@@ -336,7 +337,7 @@ export function HeatmapPage() {
             onCanvasReady={onCanvasReady}
           />
         </div>
-        <div className="shrink-0 border-t border-line-soft px-2.5 py-1.5">
+        <div className="shrink-0 border-t border-white/[0.06] px-2.5 py-1.5">
           <div className="flex items-center gap-2">
             <span className="tabular text-[9px] text-ink-dim">0</span>
             <div className="h-1.5 flex-1 rounded-full" style={{ backgroundImage: rampGradientCss() }} />
@@ -346,7 +347,7 @@ export function HeatmapPage() {
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[9px] text-ink-dim">
             <span className="inline-flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-[1px] border border-line bg-canvas" /> unmeasured
+              <span className="h-1.5 w-1.5 rounded-[1px] border border-line bg-black/25" /> unmeasured
             </span>
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-[1px] border border-dashed border-elevated" /> unstable
@@ -366,7 +367,7 @@ export function HeatmapPage() {
           </div>
         </div>
         {viewMode === 'interpolated' ? (
-          <div className="shrink-0 border-t border-line-soft px-2.5 py-1">
+          <div className="shrink-0 border-t border-white/[0.06] px-2.5 py-1">
             <span className="flex items-center gap-1 text-[9.5px] text-elevated">
               <Layers size={10} /> Hatched cells are estimated from neighbours — not measurements, excluded from
               statistics and exports.
@@ -409,7 +410,7 @@ export function HeatmapPage() {
                 </div>
 
                 {selectedMeasurement ? (
-                  <div className="rounded-[6px] border border-line bg-canvas px-2 py-1.5">
+                  <div className="rounded-[6px] border border-line bg-black/25 px-2 py-1.5">
                     <div className="flex items-center justify-between">
                       <span className="label-caps">stored</span>
                       <Badge tone={qualityTone(selectedMeasurement.quality_status)}>
@@ -551,7 +552,7 @@ export function HeatmapPage() {
 
 function CoordBox({ label, value, tone }: { label: string; value: string; tone?: 'efield' | 'hfield' }) {
   return (
-    <div className="rounded-[5px] border border-line bg-canvas px-1.5 py-1">
+    <div className="rounded-[5px] border border-line bg-black/25 px-1.5 py-1">
       <div className="text-[8.5px] tracking-[0.1em] text-ink-dim uppercase">{label}</div>
       <div
         className={cn(

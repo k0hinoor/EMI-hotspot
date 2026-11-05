@@ -33,9 +33,9 @@ export function ProbeSelector({ compact }: { compact?: boolean }) {
               'group relative flex items-start gap-2 rounded-[7px] border px-2 py-1.5 text-left transition-colors',
               active
                 ? opt.type === 'E_FIELD'
-                  ? 'border-efield/45 bg-efield/8'
-                  : 'border-hfield/45 bg-hfield/8'
-                : 'border-line bg-canvas hover:border-[#343c52]',
+                  ? 'border-efield/50 bg-efield/12 shadow-[0_0_24px_-12px_rgba(106,168,255,0.8)]'
+                  : 'border-hfield/50 bg-hfield/12 shadow-[0_0_24px_-12px_rgba(167,139,250,0.8)]'
+                : 'border-line bg-black/25 hover:border-white/20',
             )}
             aria-pressed={active}
           >

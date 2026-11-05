@@ -27,3 +27,6 @@ pnpm-debug.log*
 
 # Local scratch
 .harness
+
+.harness
+dist

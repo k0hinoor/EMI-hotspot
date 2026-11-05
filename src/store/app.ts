@@ -16,6 +16,16 @@ import {
   type DataFrame,
 } from '../lib/protocol'
 import { defaultProbes, defaultSettings } from '../lib/defaults'
+import {
+  buildDemoScan,
+  DEMO_DEVICE_ID,
+  demoFieldAt,
+  DEMO_HELLO,
+  demoTick,
+  EARTH_FIELD,
+  H_FIELD,
+  type DemoStreamState,
+} from '../lib/demo'
 import { storage } from '../lib/storage'
 import { uid } from '../lib/derive'
 import type {
@@ -115,6 +125,13 @@ interface AppState {
   selectedCell: { col: number; row: number } | null
   activeScanId: string | null
 
+  /* ---------- demo mode (PRD §12.7) ---------- */
+  demoMode: boolean
+  demoStreaming: boolean
+  enterDemoMode: () => Promise<void>
+  exitDemoMode: () => Promise<void>
+  toggleDemoStream: () => void
+
   /* ---------- actions ---------- */
   hydrate: () => Promise<void>
   refreshPorts: () => Promise<void>
@@ -154,6 +171,8 @@ interface AppState {
 }
 
 let transport: Transport | null = null
+let demoTimer: number | null = null
+let demoState: DemoStreamState = { seq: 1, phase: 0 }
 let staleTimer: number | null = null
 let persistTimer: number | null = null
 
@@ -165,6 +184,36 @@ const emptySession: SessionInfo = {
   last_message_at: null,
   connected_at: null,
 }
+
+/**
+ * Emits synthetic frames through the very same parse → validate → store path the
+ * serial link uses, so Demo Mode exercises production code rather than bypassing
+ * it. Every frame is still flagged demo by the scan it belongs to.
+ */
+function startDemoStream() {
+  if (typeof window === 'undefined') return
+  stopDemoStream()
+  demoState = { seq: 1, phase: 0 }
+  const feed = (line: string) => {
+    const handler = demoLineHandler
+    if (handler) handler(line)
+  }
+  feed(DEMO_HELLO)
+  demoTimer = window.setInterval(() => {
+    const state = useApp.getState()
+    if (!state.demoMode || !state.demoStreaming) return
+    const { line, next } = demoTick(EARTH_FIELD, demoState)
+    demoState = next
+    feed(line)
+  }, 420)
+}
+
+function stopDemoStream() {
+  if (demoTimer !== null && typeof window !== 'undefined') window.clearInterval(demoTimer)
+  demoTimer = null
+}
+
+let demoLineHandler: ((line: string) => void) | null = null
 
 function pushLog(log: LogEntry[], entry: Omit<LogEntry, 'id' | 'at'>): LogEntry[] {
   const next = [{ ...entry, id: uid('log'), at: new Date().toISOString() }, ...log]
@@ -227,6 +276,22 @@ export const useApp = create<AppState>()((set, get) => {
 
     switch (frame.kind) {
       case 'HELLO': {
+        if (frame.device_id === DEMO_DEVICE_ID) {
+          set((s) => ({
+            session: {
+              ...s.session,
+              device_id: DEMO_DEVICE_ID,
+              firmware_version: frame.firmware_version,
+              protocol_version: frame.protocol_version,
+              transport: null,
+              last_message_at: new Date().toISOString(),
+            },
+            deviceProbe: frame.probe_type ?? s.deviceProbe,
+            settings: s.settings,
+            log: pushLog(s.log, { direction: 'IN', text: 'HELLO (demo source) — synthetic frames', bytes: line.length }),
+          }))
+          return
+        }
         set((s) => {
           const devices = [
             {
@@ -365,6 +430,12 @@ export const useApp = create<AppState>()((set, get) => {
     transport = t
   }
 
+  // Demo frames reuse the serial frame handler (parse → validate → classify).
+  demoLineHandler = handleFrame
+
+  // Expose for the demo builder so timestamps stream realistically.
+  void demoFieldAt
+
   return {
     hydrated: false,
     storageOk: true,
@@ -405,6 +476,9 @@ export const useApp = create<AppState>()((set, get) => {
     selectedCell: null,
     activeScanId: null,
 
+    demoMode: false,
+    demoStreaming: false,
+
     async hydrate() {
       const available = await storage.isAvailable()
       const [settings, probes, profiles, scans, measurements, reports, devices] = await Promise.all([
@@ -427,8 +501,8 @@ export const useApp = create<AppState>()((set, get) => {
           : defaultSettings,
         probes: probes && probes.length ? probes : defaultProbes,
         profiles: profiles ?? [],
-        scans: scans ?? [],
-        measurements: measurements ?? [],
+        scans: (scans ?? []).filter((x) => !x.is_demo),
+        measurements: (measurements ?? []).filter((x) => !x.is_demo),
         reports: reports ?? [],
         devices: devices ?? [],
         activeScanId: activeScan?.scan_id ?? null,
@@ -703,6 +777,7 @@ export const useApp = create<AppState>()((set, get) => {
           superseded_by: null,
         },
         device_id: state.session.device_id,
+        is_demo: state.demoMode || undefined,
       }
 
       // Re-measuring a cell keeps history: the reading it replaces stays in the log,
@@ -783,6 +858,91 @@ export const useApp = create<AppState>()((set, get) => {
     async recordReport(report) {
       set((s) => ({ reports: [report, ...s.reports].slice(0, 60) }))
       persistSoon()
+    },
+
+    /**
+     * Demo Mode: builds clearly-labelled synthetic scans so the interface can be
+     * inspected without hardware. Records carry `is_demo` and the DEMO flag is
+     * surfaced in the header, the scan picker and every export.
+     */
+    async enterDemoMode() {
+      const cfg = get().settings.acquisition
+      const probes = get().probes
+      const eProbe = probes.find((p) => p.probe_type === 'E_FIELD')
+      const hProbe = probes.find((p) => p.probe_type === 'H_FIELD')
+      const created = [
+        buildDemoScan(EARTH_FIELD, eProbe ?? { probe_id: 'probe-e01', probe_type: 'E_FIELD', label: 'E' }, 0, {
+          adcMax: cfg.adc_max,
+          saturatedAt: cfg.saturated_at,
+          unit: cfg.unit,
+        }),
+        buildDemoScan(H_FIELD, hProbe ?? { probe_id: 'probe-h01', probe_type: 'H_FIELD', label: 'H' }, 1, {
+          adcMax: cfg.adc_max,
+          saturatedAt: cfg.saturated_at,
+          unit: cfg.unit,
+        }),
+      ]
+
+      const demoScans = created.map((c) => ({ ...c.scan, is_demo: true }))
+      const demoMeasurements = created.flatMap((c) =>
+        c.measurements.map((m) => ({ ...m, is_demo: true })),
+      )
+
+      set((s) => ({
+        demoMode: true,
+        demoStreaming: true,
+        scans: [...demoScans, ...s.scans.filter((x) => !x.is_demo)],
+        measurements: [...demoMeasurements, ...s.measurements.filter((x) => !x.is_demo)],
+        activeScanId: demoScans[0].scan_id,
+        activeProbeType: demoScans[0].probe_type,
+        samples: [],
+        windowValues: [],
+        samplesReceived: 0,
+        signalState: 'UNKNOWN',
+        signalNote: null,
+        log: pushLog(s.log, {
+          direction: 'SYS',
+          text: `DEMO MODE — ${demoMeasurements.length} synthetic readings loaded (device ${DEMO_DEVICE_ID}). Not hardware data.`,
+        }),
+      }))
+      startDemoStream()
+      get().notify('warn', 'Demo Mode enabled', 'Values are synthetic. Nothing here came from the detector.')
+    },
+
+    async exitDemoMode() {
+      stopDemoStream()
+      set((s) => ({
+        demoMode: false,
+        demoStreaming: false,
+        scans: s.scans.filter((x) => !x.is_demo),
+        measurements: s.measurements.filter((x) => !x.is_demo),
+        activeScanId: s.scans.find((x) => !x.is_demo)?.scan_id ?? null,
+        samples: [],
+        windowValues: [],
+        signalState: 'UNKNOWN',
+        signalNote: null,
+        samplesReceived: 0,
+        framesRejected: 0,
+        deviceProbe: null,
+        session: {
+          device_id: null,
+          firmware_version: null,
+          protocol_version: null,
+          transport: null,
+          last_message_at: null,
+          connected_at: null,
+        },
+        log: pushLog(s.log, { direction: 'SYS', text: 'DEMO MODE off — demo scans removed, hardware state restored.' }),
+      }))
+      persistSoon()
+      get().notify('ok', 'Demo Mode disabled', 'Synthetic scans removed. Live values will come from the detector only.')
+    },
+
+    toggleDemoStream() {
+      const next = !get().demoStreaming
+      set({ demoStreaming: next })
+      if (next) startDemoStream()
+      else stopDemoStream()
     },
 
     notify(tone, title, detail) {

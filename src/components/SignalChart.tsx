@@ -33,7 +33,7 @@ export function SignalChart({
   baseline,
   height = 240,
   fill,
-  color = '#4cc2ff',
+  color = '#35e5c5',
 }: SignalChartProps) {
   const holder = useRef<HTMLDivElement | null>(null)
   const chart = useRef<echarts.ECharts | null>(null)
@@ -71,12 +71,13 @@ export function SignalChart({
         grid: { left: 46, right: hasFiltered ? 16 : 16, top: 16, bottom: 22 },
         tooltip: {
           trigger: 'axis',
-          backgroundColor: '#14161a',
-          borderColor: '#2a2d33',
+          backgroundColor: 'rgba(11,14,22,0.96)',
+          borderColor: 'rgba(255,255,255,0.12)',
           borderWidth: 1,
           padding: [6, 9],
-          textStyle: { color: '#e9eaec', fontSize: 10.5, fontFamily: 'JetBrains Mono Variable, monospace' },
-          axisPointer: { type: 'line', lineStyle: { color: '#31353c' } },
+          textStyle: { color: '#e9eefb', fontSize: 10.5, fontFamily: 'JetBrains Mono Variable, monospace' },
+          extraCssText: 'backdrop-filter: blur(12px); border-radius: 10px; box-shadow: 0 12px 32px -12px rgba(0,0,0,0.9);',
+          axisPointer: { type: 'line', lineStyle: { color: 'rgba(53,229,197,0.35)' } },
           formatter: (params: unknown) => {
             const list = params as { value: [number, number]; seriesName: string; color: string }[]
             if (!list.length) return ''
@@ -91,11 +92,11 @@ export function SignalChart({
           type: 'time',
           min: cutoff,
           max: Date.now(),
-          axisLine: { lineStyle: { color: '#24272d' } },
+          axisLine: { lineStyle: { color: 'rgba(255,255,255,0.09)' } },
           axisTick: { show: false },
-          splitLine: { show: true, lineStyle: { color: '#191c21', type: 'solid' } },
+          splitLine: { show: true, lineStyle: { color: 'rgba(255,255,255,0.05)' } },
           axisLabel: {
-            color: '#6c727b',
+            color: '#697289',
             fontSize: 10,
             fontFamily: 'JetBrains Mono Variable, monospace',
             formatter: (v: number) => new Date(v).toLocaleTimeString('en-GB', { hour12: false }),
@@ -108,9 +109,9 @@ export function SignalChart({
           splitNumber: 4,
           axisLine: { show: false },
           axisTick: { show: false },
-          splitLine: { lineStyle: { color: '#191c21' } },
+          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
           axisLabel: {
-            color: '#6c727b',
+            color: '#697289',
             fontSize: 10,
             fontFamily: 'JetBrains Mono Variable, monospace',
           },
@@ -121,7 +122,7 @@ export function SignalChart({
             type: 'line',
             showSymbol: false,
             data,
-            lineStyle: { width: 1.4, color },
+            lineStyle: { width: 1.8, color, shadowColor: `${color}77`, shadowBlur: 14 },
             itemStyle: { color },
             areaStyle: {
               color: {
@@ -131,7 +132,7 @@ export function SignalChart({
                 x2: 0,
                 y2: 1,
                 colorStops: [
-                  { offset: 0, color: `${color}2e` },
+                  { offset: 0, color: `${color}42` },
                   { offset: 1, color: `${color}00` },
                 ],
               },
@@ -141,10 +142,10 @@ export function SignalChart({
                 ? {
                     silent: true,
                     symbol: 'none',
-                    lineStyle: { color: '#6c727b', width: 1, type: [3, 3], opacity: 0.9 },
+                    lineStyle: { color: '#697289', width: 1, type: [3, 3], opacity: 0.9 },
                     label: {
                       formatter: 'noise floor',
-                      color: '#9ba1aa',
+                      color: '#98a2b8',
                       fontSize: 9,
                       position: 'insideEndTop',
                     },
@@ -159,8 +160,8 @@ export function SignalChart({
                   type: 'line' as const,
                   showSymbol: false,
                   data: filtered,
-                  lineStyle: { width: 1, color: '#e9eaec', opacity: 0.5 },
-                  itemStyle: { color: '#e9eaec' },
+                  lineStyle: { width: 1, color: 'rgba(233,238,251,0.55)', opacity: 1 },
+                  itemStyle: { color: '#e9eefb' },
                 },
               ]
             : []),

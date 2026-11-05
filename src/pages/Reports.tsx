@@ -113,7 +113,7 @@ export function Reports() {
               <Select value={scan?.scan_id ?? ''} onChange={(e) => setScanId(e.target.value)}>
                 {scans.map((s) => (
                   <option key={s.scan_id} value={s.scan_id}>
-                    {s.scan_name} · {s.scan_id} · {s.status}
+                    {s.is_demo ? '[DEMO] ' : ''}{s.scan_name} · {s.scan_id} · {s.status}
                   </option>
                 ))}
               </Select>
@@ -152,6 +152,14 @@ export function Reports() {
               </Button>
             </div>
           </div>
+          {scan?.is_demo ? (
+            <div className="px-2.5 pb-2.5">
+              <Notice tone="warn" title="This report covers demo data" icon={<CircleAlert size={11} />}>
+                The scan is synthetic. The PDF states this in its header and notes so it can never be mistaken for a
+                hardware measurement.
+              </Notice>
+            </div>
+          ) : null}
           {summary && summary.measuredCells === 0 ? (
             <div className="px-2.5 pb-2.5">
               <Notice tone="warn" title="This scan has no measurements" icon={<CircleAlert size={11} />}>
@@ -207,7 +215,7 @@ export function Reports() {
                   {preview.map((cell) => (
                     <span
                       key={cell.label}
-                      className="rounded-[4px] border border-line bg-canvas px-1 py-[1px] font-mono text-[9.5px] text-ink-muted"
+                      className="rounded-[4px] border border-line bg-black/25 px-1 py-[1px] font-mono text-[9.5px] text-ink-muted"
                     >
                       {cell.label}
                       <span className="ml-1 text-ink">{cell.value}</span>

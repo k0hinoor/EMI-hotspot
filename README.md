@@ -4,11 +4,29 @@ A hardware-assisted near-field EMI measurement dashboard built to the requiremen
 [`prd.md`](./prd.md). It reads real frames from the detector over USB serial, records
 measurements against physical grid coordinates, and renders them as a measured-only heatmap.
 
-**There is no demo data, no sample data and no simulated signal path in this build.**
-Until a device streams frames over the serial link every value in the interface is blank and
-labelled as such.
+**There is no hidden mock data and no simulated signal path in this build.** Until a device
+streams frames over the serial link every value in the interface is blank and labelled as such.
+Synthetic values exist only behind an explicit, one-click **Demo Mode** (see below) that is
+removable in the same click and stamps every record it creates as demo.
 
 ---
+
+## Demo Mode — inspect every panel without hardware
+
+Press **Demo data** in the topbar (or open any page and use the same control) to fill the whole
+dashboard with a labelled synthetic session; press **Exit demo** to return to the empty,
+hardware-only state. Demo Mode is unmistakable on purpose:
+
+- a persistent `DEMO DATA` chip in the topbar and orange `DEMO` badges on every page that shows values;
+- every reading carries `is_demo: true` and the device id `DEMO-000`; the stream can be paused/resumed;
+- exported CSV gains an `is_demo` column plus a `demo_note` envelope line, and PDF reports print an
+  orange demo banner and footnote;
+- demo records are never persisted — a reload drops them, and *Exit demo* purges the synthetic scans,
+  readings, frames and session identity in one action.
+
+All synthetic values come from a single module, [`src/lib/demo.ts`](./src/lib/demo.ts), and are fed
+through the **real** frame handler (`#HELLO` / `#DATA`), so heatmap, topology surface, quality donut,
+statistics, log and reports exercise exactly the code paths the hardware uses.
 
 ## Run it
 
@@ -57,6 +75,7 @@ If neither Web Serial nor the bridge exists the app says so and disables capture
 
 | Page | Purpose |
 | --- | --- |
+| **Dashboard** | Session overview: 3D surface topology (drag to orbit), reading-quality donut, signal-anomaly deltas with sparklines, per-column signal profile, capture-activity bars. |
 | **Live Scan** | Raw and firmware-filtered readings, signal-vs-time plot, peak/average/baseline over a stated window, stability verdict, capture with coordinate. |
 | **Heatmap** | Millimetre grid from board dimensions and spacing, cell selection with coordinate, capture / re-measure, measured-only rendering, optional hatched interpolation overlay, hotspot ranking, coverage, CSV + PNG export. |
 | **Signal Analysis** | Amplitude history, reading distribution, live and per-scan statistics, E/H comparison on separate axes. Frequency analysis is explicitly unavailable. |
@@ -93,12 +112,13 @@ src/
     protocol.ts   frame parsing + validation + stability classification
     serial.ts     Web Serial / native bridge transports
     heatmap.ts    grid view model + canvas renderer
+    surface.ts    3D topology model (IDW) + isometric canvas renderer
     derive.ts     statistics, grid maths, colour ramp, formatting
     csv.ts        CSV/JSON export
     pdf.ts        PDF report generator
     storage.ts    IndexedDB keyed store
   store/app.ts    application state, capture pipeline, persistence
-  components/     shell, panels, charts, heatmap canvas, dialogs
+  components/     sidebar shell, glass cards, charts, heatmap + topology canvases, dialogs
   pages/          the seven navigation sections
 firmware/         reference detector sketch
 ```

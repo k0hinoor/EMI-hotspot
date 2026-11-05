@@ -118,8 +118,8 @@ export function LiveScan() {
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2.5 max-xl:h-auto max-xl:grid-rows-none">
       {!connected ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border border-dashed border-line bg-panel px-3 py-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-[6px] border border-line bg-canvas">
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border border-dashed border-line bg-white/[0.03] px-3 py-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-[6px] border border-line bg-black/25">
             <Usb size={12} className="text-ink-dim" />
           </span>
           <span className="text-[11.5px] font-medium text-ink">No detector connected</span>
@@ -143,7 +143,7 @@ export function LiveScan() {
       {/* Row 1 — readout band */}
       <Frame className="shrink-0">
         <div className="grid grid-cols-2 divide-line-soft md:grid-cols-3 lg:grid-cols-6 lg:divide-x">
-          <div className="col-span-2 border-b border-line-soft px-3 py-2.5 md:col-span-1 lg:border-b-0">
+          <div className="col-span-2 border-b border-white/[0.06] px-3 py-2.5 md:col-span-1 lg:border-b-0">
             <div className="flex items-center justify-between gap-2">
               <span className="label-caps">Raw signal</span>
               <Badge tone={signalTone(signalState)} dot={signalState !== 'UNKNOWN'}>
@@ -169,7 +169,7 @@ export function LiveScan() {
           </div>
 
           <Metric
-            className="border-b border-line-soft px-3 py-2.5 lg:border-b-0"
+            className="border-b border-white/[0.06] px-3 py-2.5 lg:border-b-0"
             label="Filtered"
             size="sm"
             value={latest?.signal_filtered != null ? formatNumber(latest.signal_filtered) : '—'}
@@ -177,7 +177,7 @@ export function LiveScan() {
             hint={latest?.signal_filtered != null ? 'reported by firmware' : 'not reported'}
           />
           <Metric
-            className="border-b border-line-soft px-3 py-2.5 lg:border-b-0"
+            className="border-b border-white/[0.06] px-3 py-2.5 lg:border-b-0"
             label={`Peak · ${windowSeconds}s`}
             size="sm"
             value={formatNumber(live.window.max)}
@@ -185,7 +185,7 @@ export function LiveScan() {
             hint={`${live.window.count} frames`}
           />
           <Metric
-            className="border-b border-line-soft px-3 py-2.5 lg:border-b-0"
+            className="border-b border-white/[0.06] px-3 py-2.5 lg:border-b-0"
             label={`Average · ${windowSeconds}s`}
             size="sm"
             value={formatNumber(live.window.mean, 1)}
@@ -193,7 +193,7 @@ export function LiveScan() {
             hint={live.window.min !== null ? `min ${formatNumber(live.window.min)}` : 'awaiting frames'}
           />
           <Metric
-            className="border-b border-line-soft px-3 py-2.5 lg:border-b-0"
+            className="border-b border-white/[0.06] px-3 py-2.5 lg:border-b-0"
             label="Spread"
             size="sm"
             value={live.window.spreadPct !== null ? formatNumber(live.window.spreadPct, 1) : '—'}
@@ -211,7 +211,7 @@ export function LiveScan() {
           />
         </div>
         {signalNote ? (
-          <div className="flex items-center gap-1.5 border-t border-line-soft px-3 py-1 text-[10px] text-elevated">
+          <div className="flex items-center gap-1.5 border-t border-white/[0.06] px-3 py-1 text-[10px] text-elevated">
             <CircleAlert size={11} /> {signalNote}
           </div>
         ) : null}
@@ -344,7 +344,7 @@ export function LiveScan() {
               icon={<Crosshair size={12} />}
             />
             <FrameBody className="space-y-2 p-2.5">
-              <div className="rounded-[6px] border border-line bg-canvas px-2 py-1.5">
+              <div className="rounded-[6px] border border-line bg-black/25 px-2 py-1.5">
                 <div className="flex items-baseline justify-between">
                   <span className="label-caps">value to store</span>
                   <span className="tabular text-[13px] text-ink">
@@ -363,7 +363,7 @@ export function LiveScan() {
                   <option value="">Unassigned reading</option>
                   {activeScans.map((s) => (
                     <option key={s.scan_id} value={s.scan_id}>
-                      {s.scan_name}
+                      {s.is_demo ? '[DEMO] ' : ''}{s.scan_name}
                     </option>
                   ))}
                 </Select>
@@ -410,13 +410,13 @@ export function LiveScan() {
                 <div className="rounded-[6px] border border-normal/25 bg-normal/6 px-2 py-1.5 text-[9.5px] text-ink-muted">
                   Stored <span className="tabular text-ink">{formatNumber(lastCaptured.raw)}</span> at{' '}
                   {formatTime(lastCaptured.at)} · {lastCaptured.quality}
-                  <Link to="/data-log" className="ml-1 text-accent underline-offset-2 hover:underline">
+                  <Link to="/data-log" className="ml-1 text-teal underline-offset-2 hover:underline">
                     log
                   </Link>
                 </div>
               ) : null}
 
-              <div className="rounded-[6px] border border-line-soft px-2 py-1.5">
+              <div className="rounded-[6px] border border-white/[0.06] px-2 py-1.5">
                 <KeyValue label="Last frame" value={relativeTime(lastFrameAt)} mono />
                 <KeyValue
                   label="Session frames"
@@ -431,7 +431,7 @@ export function LiveScan() {
                 <KeyValue label="Device" value={session.device_id ?? '—'} mono />
               </div>
 
-              <div className="rounded-[6px] border border-line-soft px-2 py-1.5">
+              <div className="rounded-[6px] border border-white/[0.06] px-2 py-1.5">
                 <div className="label-caps mb-1">acquisition window</div>
                 <div className="grid grid-cols-2 gap-1.5">
                   <Field label="Averaging">
@@ -456,7 +456,7 @@ export function LiveScan() {
             <FrameFooter>
               <Grid3x3 size={11} className="shrink-0 text-ink-dim" />
               <span className="truncate text-[9.5px] text-ink-dim">Mapping a board? Capture per cell on</span>
-              <Link to="/heatmap" className="text-[9.5px] text-accent hover:underline">
+              <Link to="/heatmap" className="text-[9.5px] text-teal hover:underline">
                 Heatmap
               </Link>
             </FrameFooter>

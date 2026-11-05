@@ -55,11 +55,11 @@ export function ScanSetupDialog({ open, onClose }: { open: boolean; onClose: () 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 p-4 sm:items-center">
       <div className="absolute inset-0" onClick={onClose} aria-hidden />
-      <div className="relative z-10 w-full max-w-[520px] rounded-[12px] border border-line bg-panel shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-line-soft px-4 py-3">
+      <div className="relative z-10 w-full max-w-[520px] rounded-[16px] border border-white/10 bg-[#0b0e16]/95 shadow-[0_32px_90px_-30px_rgba(0,0,0,0.95)] backdrop-blur-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-white/[0.06] px-4 py-3">
           <div>
             <div className="flex items-center gap-2">
-              <Grid3x3 size={15} className="text-accent" />
+              <Grid3x3 size={15} className="text-teal" />
               <h2 className="text-[12.5px] font-medium text-ink">New scan</h2>
             </div>
             <p className="mt-1 text-[11px] text-ink-dim">
@@ -70,7 +70,7 @@ export function ScanSetupDialog({ open, onClose }: { open: boolean; onClose: () 
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-ink-dim hover:bg-panel-raised hover:text-ink"
+            className="rounded p-1 text-ink-dim hover:bg-white/[0.06] hover:text-ink"
           >
             <X size={15} />
           </button>
@@ -118,7 +118,7 @@ export function ScanSetupDialog({ open, onClose }: { open: boolean; onClose: () 
 
           <Divider />
 
-          <div className="rounded-[10px] border border-line bg-canvas px-3 py-3">
+          <div className="rounded-[10px] border border-white/[0.07] bg-black/30 px-3 py-3">
             <div className="flex items-center justify-between">
               <span className="label-caps">Generated grid</span>
               {geometry ? (
@@ -158,7 +158,7 @@ export function ScanSetupDialog({ open, onClose }: { open: boolean; onClose: () 
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-line-soft px-4 py-2.5">
+        <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] px-4 py-2.5">
           <span className="text-[10.5px] text-ink-dim">Measurements are captured cell by cell from live frames.</span>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={onClose}>

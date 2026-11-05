@@ -108,7 +108,7 @@ export function Calibration() {
                         ? type === 'E_FIELD'
                           ? 'border-efield/40 bg-efield/8 text-efield'
                           : 'border-hfield/40 bg-hfield/8 text-hfield'
-                        : 'border-line bg-canvas text-ink-dim hover:text-ink-muted',
+                        : 'border-line bg-black/25 text-ink-dim hover:text-ink-muted',
                     )}
                   >
                     <TypeIcon size={11} />
@@ -298,7 +298,7 @@ export function Calibration() {
                 {history.map((h) => (
                   <li
                     key={h.profile_id}
-                    className={cn('px-2.5 py-1.5', h.profile_id === activeProfile?.profile_id && 'bg-panel-raised/50')}
+                    className={cn('px-2.5 py-1.5', h.profile_id === activeProfile?.profile_id && 'bg-white/[0.06]/50')}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate text-[10.5px] text-ink">{h.label}</span>

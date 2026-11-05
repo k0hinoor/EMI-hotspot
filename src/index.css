@@ -4,30 +4,37 @@
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', monospace;
 
-  /* Graphite chrome — neutral, no blue cast, no glow. Chroma is reserved for data. */
-  --color-canvas: #0a0b0d;
-  --color-surface: #0e1013;
-  --color-panel: #121418;
-  --color-panel-raised: #171a1f;
-  --color-line: #24272d;
-  --color-line-soft: #1b1e23;
+  /* Deep space chrome, colourful ambient light */
+  --color-canvas: #05060a;
+  --color-surface: #0b0e16;
+  --color-panel: #0d1019;
+  --color-panel-raised: #141a2a;
+  --color-line: #1e2438;
+  --color-line-soft: #171d2c;
 
-  /* Chrome accent: warm ivory. Used for primary actions and the active frame. */
-  --color-accent: #e6e2d9;
-  --color-accent-ink: #14161a;
+  /* Data + status hues from the reference */
+  --color-teal: #35e5c5;
+  --color-blue: #6aa8ff;
+  --color-violet: #a78bfa;
+  --color-amber: #f7a84b;
+  --color-rose: #ff6f8b;
+  --color-green: #3ddc97;
 
-  /* Data identity (PRD §5.2 hues, retuned for contrast on graphite) */
-  --color-efield: #4cc2ff;
-  --color-hfield: #b98bff;
-  --color-elevated: #f0a03c;
-  --color-strong: #f2555a;
-  --color-normal: #46c08b;
+  --color-accent: #35e5c5;
+  --color-accent-ink: #04211d;
 
-  --color-ink: #e9eaec;
-  --color-ink-muted: #9ba1aa;
-  --color-ink-dim: #6c727b;
+  /* Semantic aliases used across the app */
+  --color-efield: #6aa8ff;
+  --color-hfield: #a78bfa;
+  --color-elevated: #f7a84b;
+  --color-strong: #ff6f8b;
+  --color-normal: #3ddc97;
 
-  --radius-card: 10px;
+  --color-ink: #e9eefb;
+  --color-ink-muted: #98a2b8;
+  --color-ink-dim: #697289;
+
+  --radius-card: 14px;
 }
 
 @layer base {
@@ -46,6 +53,7 @@
   }
 
   body {
+    position: relative;
     background-color: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
@@ -55,13 +63,28 @@
     overflow: hidden;
   }
 
+  /* Ambient colour wash behind the glass — the reference's bokeh light. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(52rem 34rem at 8% -8%, rgba(53, 229, 197, 0.16), transparent 62%),
+      radial-gradient(46rem 30rem at 92% 6%, rgba(167, 139, 250, 0.18), transparent 60%),
+      radial-gradient(40rem 28rem at 70% 104%, rgba(106, 168, 255, 0.14), transparent 62%),
+      radial-gradient(30rem 22rem at 24% 96%, rgba(255, 111, 139, 0.1), transparent 64%);
+    filter: saturate(1.05);
+  }
+
   ::selection {
-    background: color-mix(in srgb, var(--color-accent) 24%, transparent);
-    color: var(--color-ink);
+    background: color-mix(in srgb, var(--color-teal) 30%, transparent);
+    color: #04120f;
   }
 
   :focus-visible {
-    outline: 1px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--color-teal) 65%, transparent);
     outline-offset: 1px;
   }
 
@@ -72,17 +95,16 @@
     font: inherit;
   }
 
-  /* Fixed frames: every scrolling region is explicit and thin. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #2b2f36 transparent;
+    scrollbar-color: #232a3d transparent;
   }
   *::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   *::-webkit-scrollbar-thumb {
-    background: #2b2f36;
+    background: #232a3d;
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: padding-box;
@@ -99,21 +121,44 @@
     letter-spacing: -0.01em;
   }
 
-  .panel {
-    background-color: var(--color-panel);
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-card);
+  .label-caps {
+    font-size: 9.5px;
+    line-height: 1.2;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-ink-dim);
+    font-weight: 500;
   }
 
-  /* A frame is a fixed-height panel that owns its own scroll. */
+  /* The card: dark glass with a lit top edge. */
+  .panel {
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 30%),
+      linear-gradient(180deg, rgba(17, 21, 33, 0.94), rgba(11, 14, 22, 0.96));
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow:
+      0 18px 40px -24px rgba(0, 0, 0, 0.9),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(18px) saturate(1.15);
+  }
+
   .frame {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    background-color: var(--color-panel);
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 28%),
+      linear-gradient(180deg, rgba(17, 21, 33, 0.94), rgba(11, 14, 22, 0.96));
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
+    box-shadow:
+      0 18px 40px -24px rgba(0, 0, 0, 0.9),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
     overflow: hidden;
+    backdrop-filter: blur(18px) saturate(1.15);
   }
 
   .frame-body {
@@ -123,18 +168,25 @@
     overscroll-behavior: contain;
   }
 
-  .label-caps {
-    font-size: 9.5px;
+  .card-title {
+    font-size: 14px;
     line-height: 1.2;
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-    color: var(--color-ink-dim);
     font-weight: 500;
+    letter-spacing: -0.01em;
+    color: #eef3ff;
   }
 
-  /* Hairline separators that read as instrument panel joins. */
-  .hair-x > * + * {
-    border-left: 1px solid var(--color-line-soft);
+  .panel-link {
+    color: var(--color-ink-muted);
+    font-size: 11px;
+    transition: color 0.15s ease;
+  }
+  .panel-link:hover {
+    color: var(--color-teal);
+  }
+
+  .neon-ring {
+    filter: drop-shadow(0 0 6px rgba(53, 229, 197, 0.45));
   }
 }
 
@@ -144,7 +196,19 @@
     opacity: 1;
   }
   50% {
-    opacity: 0.3;
+    opacity: 0.28;
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2%, -1.5%, 0) scale(1.05);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
   }
 }
 
@@ -152,8 +216,13 @@
   animation: pulse-soft 2.2s ease-in-out infinite;
 }
 
+.ambient-drift {
+  animation: drift 26s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-pulse-soft {
+  .animate-pulse-soft,
+  .ambient-drift {
     animation: none;
   }
 }
