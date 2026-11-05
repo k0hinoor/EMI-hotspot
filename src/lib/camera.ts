@@ -182,6 +182,23 @@ export function captureFrame(video: HTMLVideoElement, maxWidth = 1280): Captured
   return { dataUrl: canvas.toDataURL('image/png'), width: w, height: h, at: new Date().toISOString() }
 }
 
+/** Grabs a decoded image (an ESP32-CAM frame) as a PNG data URL. */
+export function captureImageFrame(image: HTMLImageElement, maxWidth = 1280): CapturedFrame | null {
+  const width = image.naturalWidth
+  const height = image.naturalHeight
+  if (!width || !height) return null
+  const scale = Math.min(1, maxWidth / width)
+  const w = Math.max(1, Math.round(width * scale))
+  const h = Math.max(1, Math.round(height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.drawImage(image, 0, 0, w, h)
+  return { dataUrl: canvas.toDataURL('image/png'), width: w, height: h, at: new Date().toISOString() }
+}
+
 /** Grabs a canvas (the demo feed) as a PNG data URL. */
 export function captureCanvasFrame(canvas: HTMLCanvasElement, maxWidth = 1280): CapturedFrame | null {
   if (!canvas.width || !canvas.height) return null

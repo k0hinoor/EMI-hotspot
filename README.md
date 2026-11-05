@@ -28,6 +28,59 @@ All synthetic values come from a single module, [`src/lib/demo.ts`](./src/lib/de
 through the **real** frame handler (`#HELLO` / `#DATA`), so heatmap, topology surface, quality donut,
 statistics, log and reports exercise exactly the code paths the hardware uses.
 
+## ESP32-CAM as the sensor head
+
+The ESP32-CAM is the machine-vision source: it sees the board **and** reads the detector, then ships
+both over one WebSocket so the dashboard never has to guess what was true when a frame was captured.
+
+**Firmware** — [`firmware/emi_hotspot_esp32cam.ino`](./firmware/emi_hotspot_esp32cam.ino) (AI-Thinker
+ESP32-CAM, OV2640). Per frame it sends a meta line then the JPEG:
+
+```
+#CAM {"seq":418,"fw":"esp32cam-1.1.0","signal_raw":1180,"signal_filtered":1152,
+       "spread":64,"status":"VALID","probe":"E_FIELD","w":640,"h":480,"fps":12,"samples":32}
+<binary JPEG>
+```
+
+The same text protocol is mirrored on USB serial (`#HELLO`, `#DATA`, …) for a machine without Wi-Fi.
+
+> **ADC wiring note.** ADC2 (GPIO 13) shares silicon with the Wi-Fi radio, so its readings are
+> unreliable while the camera and radio run. For trustworthy numbers feed the detector envelope into
+> **GPIO 2 or GPIO 15 (ADC1)** and change `DETECTOR_PIN`. The sketch reports what it actually read —
+> out-of-range and high-spread frames are labelled, never smoothed away.
+
+**Dashboard side** — open **Machine Vision** (`4`), set the module host and press **Connect module**
+(`ws://<host>:81/stream`). MJPEG (`http://<host>:81/stream`) is supported for the stock
+CameraWebServer sketch, but it carries picture only — the reading still has to come over serial.
+
+What the link reports, all measured from arriving frames:
+
+| Panel | What it shows |
+|-------|---------------|
+| Module | link state, frames, delivered fps, resolution, frame size, **arrival median / p95 jitter**, dropped |
+| Stream health | delivery-rate and frame-size sparklines, jitter, sample count |
+| Viewfinder | the decoded JPEG, `frame #seq`, size, fps, kB — painted to canvas so a 12 fps stream doesn't flicker |
+| 3D reconstruction | that frame used as the board texture, with the measured field draped over it |
+
+A socket that opens but stops delivering is reported **STALLED** rather than left "live"; a decode
+failure is shown as an error, never as a picture. Frames are buffered and replayed on a fixed cadence,
+because Wi-Fi bursts two or three JPEGs at once — the *rate* is smoothed, the frames are untouched.
+
+## Trace stability
+
+The live trace looked unstable for three real reasons, and each is handled explicitly in
+`conditionSeries()` (`src/lib/derive.ts`):
+
+1. **ADC quantisation noise** → a 5-frame **median** rejects isolated outliers; a genuine hotspot
+   plateau survives untouched.
+2. **Drop-outs / spikes** → gated out of the estimate and shown as a gap, never averaged into a value.
+3. **Saturation clipping** → saturated frames are **held out** of the estimate and counted in the
+   tooltip, because a clipped reading is not a quiet one.
+
+`Live Scan` (`2`) exposes **Smoothed / Median / Raw**. In every mode the raw frames stay visible behind
+the conditioned line, and the stability readout (`stability 2.4%`) is computed from the raw frames, so
+drawing cannot flatter the number. Statistics elsewhere keep using raw values only.
+
 ## Machine Vision — camera + 3D reconstruction
 
 The **Machine Vision** frame (key `4`) puts the machine itself on screen:
@@ -36,10 +89,12 @@ The **Machine Vision** frame (key `4`) puts the machine itself on screen:
   Nothing is simulated. With no camera (or permission refused) the viewfinder stays **black** and
   states the reason — *no camera detected*, *permission refused*, *in use by another app* — with a
   **Use camera** button. It never shows a placeholder picture.
-- **3D reconstruction** — the camera frame is used as the **texture** of a 3D board plane sized from
-  the active scan (mm). Measured EMI readings are interpolated into a sheet and draped over it, so you
-  can see the field sitting on the actual board. Drag to orbit, wheel to zoom, and switch the overlay
-  off to inspect the DUT alone. Texture can be the centred board crop or the full frame.
+- **3D reconstruction** — the module frame is used as the **texture** of a board plane sized from the
+  active scan (mm). Measured EMI readings are interpolated into a **lit sheet** and draped over it.
+  The renderer (`src/lib/scene.ts`) is a small software rasteriser: perspective camera, per-facet
+  Lambert + rim lighting, depth-sorted facets with seam-free edges, 2.5× supersampling, and a textured
+  board mesh so the picture follows the geometry instead of being stretched over one quad.
+  Drag to orbit, wheel to zoom, and switch the overlay off to inspect the DUT alone.
 - **Provenance** — resolution, delivered fps, device id and capture count come from the track itself.
   Captured stills stay in memory for the session (never persisted), exportable as PNG.
 

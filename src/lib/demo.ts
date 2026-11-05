@@ -420,3 +420,41 @@ export function paintDemoFrame(
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Demo ESP32-CAM frames                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** Marker device id carried by the demo module feed. */
+export const DEMO_ESP32_ID = 'DEMO-CAM-01'
+
+/**
+ * Paints a synthetic board view sized like the ESP32-CAM's VGA output and
+ * returns it as JPEG-quality-limited bytes… except the canvas gives us PNG, so
+ * the returned buffer is the canvas' own encoding.
+ *
+ * The point is not the codec: it is that the demo pipeline exercises the *same*
+ * decode → ingest → texture path the module's JPEG does, so Demo Mode tests the
+ * real code instead of bypassing it.
+ */
+export function paintDemoModuleFrame(
+  canvas: HTMLCanvasElement,
+  options: { widthMm: number; heightMm: number; t: number; width?: number; height?: number },
+): { bytes: Uint8Array; dataUrl: string; width: number; height: number } | null {
+  const width = options.width ?? 640
+  const height = options.height ?? 480
+  if (canvas.width !== width) canvas.width = width
+  if (canvas.height !== height) canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  paintDemoFrame(ctx, width, height, { widthMm: options.widthMm, heightMm: options.heightMm, t: options.t })
+
+  // ESP32-CAM framing: the module overlays a small OSD, so the texture differs
+  // from a plain webcam picture even for the same board.
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+  const base64 = dataUrl.split(',')[1] ?? ''
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return { bytes, dataUrl, width, height }
+}

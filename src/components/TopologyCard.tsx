@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
-import { buildSurface, drawSurface, type SurfaceCamera } from '../lib/surface'
+import { buildSurface, type SurfaceModel } from '../lib/surface'
+import { drawScene, DEFAULT_CAMERA, type SceneCamera, type CoverageGrid } from '../lib/scene'
 import { measurementsForScan, useApp } from '../store/app'
 import { cn } from './ui'
 import type { Measurement, Scan } from '../lib/types'
 
-const DEFAULTS: SurfaceCamera = { yaw: -0.62, pitch: 0.92, zoom: 1 }
+const DEFAULTS: SceneCamera = DEFAULT_CAMERA
+
+/** Denser sampling than the old wireframe: this is the panel that reads as 3D. */
+const RESAMPLE = 40
 
 /**
  * 3D topology of the measured field. Direct measurements drive the mesh; the
@@ -27,11 +31,11 @@ export function TopologySurface({
 }) {
   const wrap = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [camera, setCamera] = useState<SurfaceCamera>(DEFAULTS)
+  const [camera, setCamera] = useState<SceneCamera>(DEFAULTS)
   const [size, setSize] = useState({ width: 640, height: 260 })
   const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
 
-  const model = useMemo(() => buildSurface(scan, measurements), [scan, measurements])
+  const model = useMemo(() => buildSurface(scan, measurements, RESAMPLE), [scan, measurements])
 
   useEffect(() => {
     const el = wrap.current
@@ -49,7 +53,7 @@ export function TopologySurface({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5)
     canvas.width = size.width * dpr
     canvas.height = size.height * dpr
     canvas.style.width = `${size.width}px`
@@ -57,12 +61,24 @@ export function TopologySurface({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    drawSurface(ctx, size.width, size.height, model, camera, {
-      unit,
-      xLabel: 'X',
-      yLabel: 'Y',
-    })
-  }, [model, camera, size, unit])
+    // Same lit renderer as the Machine Vision reconstruction, so the dashboard
+    // and the camera frame read as one instrument.
+    drawScene(
+      ctx,
+      { width: size.width, height: size.height },
+      camera,
+      {
+        widthMm: scan.board_width_mm,
+        heightMm: scan.board_height_mm,
+        coverage: model.measured > 0 ? toCoverage(model) : null,
+        role: 'board',
+        texture: null,
+        unit,
+        peak: null,
+        relief: 0.18,
+      },
+    )
+  }, [model, camera, size, unit, scan])
 
   return (
     <div
@@ -77,7 +93,7 @@ export function TopologySurface({
         if (!drag.current) return
         const dx = e.clientX - drag.current.x
         const dy = e.clientY - drag.current.y
-        setCamera((prev) => ({
+        setCamera((prev: SceneCamera) => ({
           ...prev,
           yaw: drag.current!.yaw + dx * 0.008,
           pitch: Math.max(0.35, Math.min(1.25, drag.current!.pitch + dy * 0.005)),
@@ -88,6 +104,13 @@ export function TopologySurface({
       }}
       onPointerLeave={() => {
         drag.current = null
+      }}
+      onWheel={(e) => {
+        e.preventDefault()
+        setCamera((prev: SceneCamera) => ({
+          ...prev,
+          zoom: Math.max(0.65, Math.min(2.1, prev.zoom - e.deltaY * 0.0013)),
+        }))
       }}
     >
       <canvas ref={canvasRef} className="block h-full w-full" aria-label="3D topology of measured signal" />
@@ -134,4 +157,16 @@ export function TopologyForScan({ unit, className }: { unit: string; className?:
   }
 
   return <TopologySurface scan={scan} measurements={ms} unit={unit} className={className} />
+}
+
+function toCoverage(model: SurfaceModel): CoverageGrid {
+  return {
+    cols: model.cols,
+    rows: model.rows,
+    values: model.values,
+    min: model.min,
+    max: model.max,
+    measured: model.measured,
+    interpolated: model.interpolated,
+  }
 }

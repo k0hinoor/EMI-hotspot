@@ -54,6 +54,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const deviceState = useApp((s) => s.deviceState)
   const measurementCount = useApp((s) => s.measurements.length)
   const cameraLive = useApp((s) => s.cameraStatus === 'LIVE')
+  const esp32Link = useApp((s) => s.esp32Link)
+  const esp32Host = useApp((s) => s.esp32Config.host)
 
   return (
     <div className="flex h-full flex-col">
@@ -122,6 +124,19 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               ? `Firmware ${session.firmware_version ?? 'n/a'}`
               : 'Readings stay blank until frames arrive.'}
           </p>
+          <div className="mt-1.5 flex items-center gap-2 border-t border-white/[0.06] pt-1.5">
+            <StatusDot
+              tone={esp32Link === 'STREAMING' ? 'ok' : esp32Link === 'STALLED' ? 'warn' : 'neutral'}
+              pulse={esp32Link === 'STREAMING'}
+            />
+            <span className="truncate text-[10px] text-ink-dim">
+              {esp32Link === 'STREAMING'
+                ? `ESP32-CAM · ${esp32Host}`
+                : esp32Link === 'STALLED'
+                  ? 'ESP32-CAM stalled'
+                  : 'ESP32-CAM offline'}
+            </span>
+          </div>
         </div>
       </div>
     </div>
