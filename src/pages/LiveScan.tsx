@@ -363,7 +363,7 @@ export function LiveScan() {
                   <option value="">Unassigned reading</option>
                   {activeScans.map((s) => (
                     <option key={s.scan_id} value={s.scan_id}>
-                      {s.scan_name}
+                      {s.is_demo ? '[DEMO] ' : ''}{s.scan_name}
                     </option>
                   ))}
                 </Select>

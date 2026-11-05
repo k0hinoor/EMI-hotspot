@@ -1,7 +1,8 @@
 # V1.0 feature checklist → where it lives
 
-Every item from the V1.0 checklist is implemented. Nothing here is fed by sample data: each
-capability reads the live serial stream or records already captured from it.
+Every item from the V1.0 checklist is implemented. Nothing here is fed by hidden sample data: each
+capability reads the live serial stream or records already captured from it. Synthetic values are
+available only through the explicit **Demo Mode** documented at the end of this file.
 
 | # | Feature | Where | How to see it |
 |---|---------|-------|---------------|
@@ -32,3 +33,19 @@ placeholder data.
 Each page fills the viewport: panels are fixed-height and scroll internally, so the dashboard never
 turns into a long document. Deep links work (hash routes), and the status rail stays visible on
 every frame.
+
+## Demo Mode (inspection without hardware)
+
+`src/lib/demo.ts` is the only module that generates synthetic values; `src/store/app.ts` streams them
+through the real `handleFrame` path as `#HELLO`/`#DATA` lines from device `DEMO-000`.
+
+| Control | Effect |
+|---------|--------|
+| Topbar **Demo data** | Loads two scans (60 × 40 mm @ 4 mm, E and H probes), ~220 readings, a quality mix and superseding readings, then starts a live-looking stream |
+| Topbar **Pause / Resume** | Halts or restarts the synthetic frame feed |
+| Topbar **Exit demo** | Purges demo scans, readings, frames, probe and session identity; returns to the blank hardware state |
+
+Every demo reading has `is_demo: true` and is badged `DEMO` on Dashboard, Live Scan, Heatmap,
+Analytics, Data Log and Reports. CSV export adds an `is_demo` column and a `demo_note` line; PDF
+reports print an orange banner and footnote. Demo records are never written to storage, so a reload
+returns to the hardware-only state.

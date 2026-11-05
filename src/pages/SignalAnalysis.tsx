@@ -179,7 +179,7 @@ export function SignalAnalysis() {
               <option value="">Select a scan…</option>
               {scans.map((s) => (
                 <option key={s.scan_id} value={s.scan_id}>
-                  {s.scan_name} · {probeLabel(s.probe_type)}
+                  {s.is_demo ? '[DEMO] ' : ''}{s.scan_name} · {probeLabel(s.probe_type)}
                 </option>
               ))}
             </Select>

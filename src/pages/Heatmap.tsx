@@ -194,6 +194,7 @@ export function HeatmapPage() {
             subtitle={scan.scan_id}
             right={
               <>
+                {scan.is_demo ? <Badge tone="warn">DEMO</Badge> : null}
                 <Badge tone={scan.status === 'COMPLETED' ? 'ok' : scan.status === 'ACTIVE' ? 'accent' : 'warn'}>
                   {scan.status}
                 </Badge>
@@ -209,7 +210,7 @@ export function HeatmapPage() {
             >
               {scans.map((s) => (
                 <option key={s.scan_id} value={s.scan_id}>
-                  {s.scan_name} · {s.scan_id}
+                  {s.is_demo ? '[DEMO] ' : ''}{s.scan_name} · {s.scan_id}
                 </option>
               ))}
             </Select>

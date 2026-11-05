@@ -74,6 +74,10 @@ export function generateReport(input: ReportInput): { report: Report; pdf: jsPDF
   // Header
   doc.setFillColor(INK.r, INK.g, INK.b)
   doc.rect(0, 0, pageWidth, 74, 'F')
+  if (scan.is_demo) {
+    doc.setFillColor(240, 160, 60)
+    doc.rect(0, 0, pageWidth, 5, 'F')
+  }
   text('EMI Hotspot Mapper', margin, 32, 15, { r: 255, g: 255, b: 255 }, 'bold')
   text('Near-field scan report · relative measurement', margin, 49, 8.5, { r: 168, g: 176, b: 196 })
   doc.setFont('helvetica', 'normal')
@@ -84,6 +88,10 @@ export function generateReport(input: ReportInput): { report: Report; pdf: jsPDF
   y = 100
 
   // Scan identity
+  if (scan.is_demo) {
+    text('DEMO DATA — SYNTHETIC, NOT A MEASUREMENT', margin, y, 9, { r: 176, g: 98, b: 10 }, 'bold')
+    y += 14
+  }
   text(scan.scan_name, margin, y, 16, INK, 'bold')
   y += 16
   text(`${scan.scan_id} · ${scan.status} · probe ${probeLabel(scan.probe_type)} (${scan.probe_id})`, margin, y, 8.5, MUTED)
@@ -286,6 +294,9 @@ export function generateReport(input: ReportInput): { report: Report; pdf: jsPDF
     'Coordinates are supplied manually by the operator. Positional accuracy is limited by manual probe placement.',
     'Interpolated areas, where shown, are a visualisation aid and are not measurement data.',
     'A broadband amplitude detector cannot resolve frequency components; no spectral content is claimed.',
+    ...(scan.is_demo
+      ? ['This report was generated from Demo Mode data. It does not describe any physical measurement and must not be used as test evidence.']
+      : []),
   ]
   limitations.forEach((line) => {
     const wrapped = doc.splitTextToSize(`• ${line}`, pageWidth - margin * 2) as string[]

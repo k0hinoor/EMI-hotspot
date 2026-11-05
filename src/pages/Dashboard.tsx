@@ -112,7 +112,7 @@ export function Dashboard() {
           title="3D Topology & Surface Heatmap"
           subtitle={
             scan
-              ? `${scan.scan_name} · ${scan.board_width_mm} × ${scan.board_height_mm} mm · ${scanMeasurements.length} measured cells`
+              ? `${scan.is_demo ? 'DEMO · ' : ''}${scan.scan_name} · ${scan.board_width_mm} × ${scan.board_height_mm} mm · ${scanMeasurements.length} measured cells`
               : 'no scan defined'
           }
           icon={<Radar size={14} />}

@@ -4,11 +4,29 @@ A hardware-assisted near-field EMI measurement dashboard built to the requiremen
 [`prd.md`](./prd.md). It reads real frames from the detector over USB serial, records
 measurements against physical grid coordinates, and renders them as a measured-only heatmap.
 
-**There is no demo data, no sample data and no simulated signal path in this build.**
-Until a device streams frames over the serial link every value in the interface is blank and
-labelled as such.
+**There is no hidden mock data and no simulated signal path in this build.** Until a device
+streams frames over the serial link every value in the interface is blank and labelled as such.
+Synthetic values exist only behind an explicit, one-click **Demo Mode** (see below) that is
+removable in the same click and stamps every record it creates as demo.
 
 ---
+
+## Demo Mode — inspect every panel without hardware
+
+Press **Demo data** in the topbar (or open any page and use the same control) to fill the whole
+dashboard with a labelled synthetic session; press **Exit demo** to return to the empty,
+hardware-only state. Demo Mode is unmistakable on purpose:
+
+- a persistent `DEMO DATA` chip in the topbar and orange `DEMO` badges on every page that shows values;
+- every reading carries `is_demo: true` and the device id `DEMO-000`; the stream can be paused/resumed;
+- exported CSV gains an `is_demo` column plus a `demo_note` envelope line, and PDF reports print an
+  orange demo banner and footnote;
+- demo records are never persisted — a reload drops them, and *Exit demo* purges the synthetic scans,
+  readings, frames and session identity in one action.
+
+All synthetic values come from a single module, [`src/lib/demo.ts`](./src/lib/demo.ts), and are fed
+through the **real** frame handler (`#HELLO` / `#DATA`), so heatmap, topology surface, quality donut,
+statistics, log and reports exercise exactly the code paths the hardware uses.
 
 ## Run it
 

@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   Activity,
   Bell,
+  Beaker,
   ChartLine,
   CircleAlert,
   Crosshair,
@@ -121,7 +122,21 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function TopBar({ onConnect, onMenu }: { onConnect: () => void; onMenu: () => void }) {
-  const { deviceState, session, samplesReceived, lastFrameAt, deviceProbe, signalState, acquiring, storageOk } = useApp()
+  const {
+    deviceState,
+    session,
+    samplesReceived,
+    lastFrameAt,
+    deviceProbe,
+    signalState,
+    acquiring,
+    storageOk,
+    demoMode,
+    demoStreaming,
+    enterDemoMode,
+    exitDemoMode,
+    toggleDemoStream,
+  } = useApp()
   const connected = deviceState === 'CONNECTED'
   const meta = PAGE_META[useLocation().pathname] ?? PAGE_META['/']
 
@@ -166,6 +181,45 @@ function TopBar({ onConnect, onMenu }: { onConnect: () => void; onMenu: () => vo
           {lastFrameAt ? formatTime(lastFrameAt) : '--:--:--'}
         </span>
         <Crosshair size={12} className="text-ink-dim" />
+      </div>
+
+      {/* Demo Mode control — always visible so its state is never ambiguous */}
+      <div className="flex shrink-0 items-center gap-1.5">
+        {demoMode ? (
+          <>
+            <span className="hidden items-center gap-1.5 rounded-full border border-elevated/45 bg-elevated/15 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-elevated sm:inline-flex">
+              <span className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-elevated" />
+              DEMO DATA
+            </span>
+            <Button size="sm" variant="ghost" onClick={toggleDemoStream} title="Pause or resume the synthetic stream">
+              {demoStreaming ? 'Pause stream' : 'Resume stream'}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                void exitDemoMode()
+                window.location.hash = '#/'
+              }}
+            >
+              Exit demo
+            </Button>
+          </>
+        ) : (
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<Beaker size={11} />}
+            onClick={() => {
+              void enterDemoMode()
+              window.location.hash = '#/'
+            }}
+            title="Load clearly-labelled synthetic data to inspect the interface without hardware"
+          >
+            <span className="hidden sm:inline">Demo data</span>
+            <span className="sm:hidden">Demo</span>
+          </Button>
+        )}
       </div>
 
       <div className="hidden items-center gap-1.5 md:flex">

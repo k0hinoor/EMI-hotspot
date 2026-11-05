@@ -72,6 +72,8 @@ export interface Scan {
   notes: string
   origin: 'TOP_LEFT' | 'BOTTOM_LEFT'
   calibration_profile_id: string | null
+  /** True only for records produced by Demo Mode (PRD §12.7). */
+  is_demo?: boolean
 }
 
 /** PRD §11.4 */
@@ -90,6 +92,8 @@ export interface Measurement {
   calibration_profile_id: string | null
   acquisition_metadata: AcquisitionMetadata
   device_id: string | null
+  /** True only for records produced by Demo Mode (PRD §12.7). */
+  is_demo?: boolean
 }
 
 export interface AcquisitionMetadata {

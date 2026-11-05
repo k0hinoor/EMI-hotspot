@@ -133,7 +133,7 @@ export function DataLog() {
               <option value="ALL">All scans</option>
               {scans.map((s) => (
                 <option key={s.scan_id} value={s.scan_id}>
-                  {s.scan_name}
+                  {s.is_demo ? '[DEMO] ' : ''}{s.scan_name}
                 </option>
               ))}
             </Select>
@@ -239,7 +239,10 @@ export function DataLog() {
                         className="h-2.5 w-2.5 accent-accent"
                       />
                     </td>
-                    <td className="px-1.5 py-1 font-mono text-[9.5px] text-ink-muted">{m.measurement_id}</td>
+                    <td className="px-1.5 py-1 font-mono text-[9.5px] text-ink-muted">
+                      {m.is_demo ? <span className="mr-1 text-elevated">◇</span> : null}
+                      {m.measurement_id}
+                    </td>
                     <td className="max-w-[130px] truncate px-1.5 py-1 text-ink-muted">
                       {m.scan_id ? (scanName.get(m.scan_id) ?? m.scan_id) : <span className="text-ink-dim">unassigned</span>}
                     </td>
@@ -287,6 +290,7 @@ export function DataLog() {
               <div className="flex flex-wrap items-center gap-1">
                 <Badge tone={qualityTone(detail.quality_status)}>{detail.quality_status}</Badge>
                 <Badge tone={detail.probe_type === 'E_FIELD' ? 'efield' : 'hfield'}>{probeLabel(detail.probe_type)}</Badge>
+                {detail.is_demo ? <Badge tone="warn">DEMO</Badge> : null}
                 {detail.acquisition_metadata.superseded_by ? <Badge tone="warn">SUPERSEDED</Badge> : null}
               </div>
               <div>
