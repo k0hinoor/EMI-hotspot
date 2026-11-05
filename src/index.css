@@ -1,0 +1,159 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', monospace;
+
+  /* Graphite chrome — neutral, no blue cast, no glow. Chroma is reserved for data. */
+  --color-canvas: #0a0b0d;
+  --color-surface: #0e1013;
+  --color-panel: #121418;
+  --color-panel-raised: #171a1f;
+  --color-line: #24272d;
+  --color-line-soft: #1b1e23;
+
+  /* Chrome accent: warm ivory. Used for primary actions and the active frame. */
+  --color-accent: #e6e2d9;
+  --color-accent-ink: #14161a;
+
+  /* Data identity (PRD §5.2 hues, retuned for contrast on graphite) */
+  --color-efield: #4cc2ff;
+  --color-hfield: #b98bff;
+  --color-elevated: #f0a03c;
+  --color-strong: #f2555a;
+  --color-normal: #46c08b;
+
+  --color-ink: #e9eaec;
+  --color-ink-muted: #9ba1aa;
+  --color-ink-dim: #6c727b;
+
+  --radius-card: 10px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv05' 1, 'ss03' 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 24%, transparent);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+    outline-offset: 1px;
+  }
+
+  input,
+  select,
+  button,
+  textarea {
+    font: inherit;
+  }
+
+  /* Fixed frames: every scrolling region is explicit and thin. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2b2f36 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #2b2f36;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+    letter-spacing: -0.01em;
+  }
+
+  .panel {
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+
+  /* A frame is a fixed-height panel that owns its own scroll. */
+  .frame {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+  }
+
+  .frame-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .label-caps {
+    font-size: 9.5px;
+    line-height: 1.2;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--color-ink-dim);
+    font-weight: 500;
+  }
+
+  /* Hairline separators that read as instrument panel joins. */
+  .hair-x > * + * {
+    border-left: 1px solid var(--color-line-soft);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-soft {
+    animation: none;
+  }
+}
