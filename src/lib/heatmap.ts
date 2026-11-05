@@ -53,8 +53,15 @@ export function cellAtPoint(
   return { col, row }
 }
 
-export function plotRect(width: number, height: number, scan: Scan) {
-  const margin = { left: 44, right: 14, top: 14, bottom: 30 }
+export function plotRect(width: number, height: number, scan: Scan, rows = 8) {
+  // Small grids get room for cell letters; the axis has to earn its pixels.
+  const showLetters = rows > 0 && height > 380
+  const margin = {
+    left: showLetters ? 46 : 30,
+    right: 10,
+    top: 14,
+    bottom: 26,
+  }
   const available = {
     w: Math.max(10, width - margin.left - margin.right),
     h: Math.max(10, height - margin.top - margin.bottom),
@@ -118,7 +125,7 @@ export function drawHeatmap(
   ctx.clearRect(0, 0, width, height)
 
   // Board background: unmeasured area is visibly empty, not a fabricated heatmap.
-  ctx.fillStyle = '#0B0E17'
+  ctx.fillStyle = '#0a0b0d'
   ctx.fillRect(x, y, w, h)
 
   // Derived (interpolated) surface, drawn first and visually distinguished.
@@ -155,7 +162,7 @@ export function drawHeatmap(
       const pad = Math.min(1.2, cw * 0.06)
       if (!m) {
         // Vacuum: faint pin dot so cells read as coordinates, not data.
-        ctx.fillStyle = 'rgba(255,255,255,0.045)'
+        ctx.fillStyle = 'rgba(255,255,255,0.05)'
         ctx.beginPath()
         ctx.arc(cx + cw / 2, cy + ch / 2, Math.max(1, Math.min(2.2, cw * 0.08)), 0, Math.PI * 2)
         ctx.fill()
@@ -165,7 +172,7 @@ export function drawHeatmap(
       const invalid = m.quality_status === 'INVALID'
       const t = normalise(m.signal_raw, view.scaleMin, view.scaleMax)
       if (invalid) {
-        ctx.fillStyle = '#171C2A'
+        ctx.fillStyle = '#16181c'
       } else {
         ctx.fillStyle = rampColor(t, m.quality_status === 'UNSTABLE' ? 0.72 : 0.95)
       }
@@ -182,11 +189,11 @@ export function drawHeatmap(
         ctx.lineTo(cx + pad + 2, cy + ch - pad - 2)
         ctx.stroke()
       } else if (m.quality_status === 'SATURATED') {
-        ctx.strokeStyle = '#EF4444'
+        ctx.strokeStyle = '#f2555a'
         ctx.lineWidth = 1.4
         ctx.strokeRect(cx + pad + 0.7, cy + pad + 0.7, cw - pad * 2 - 1.4, ch - pad * 2 - 1.4)
       } else if (m.quality_status === 'UNSTABLE') {
-        ctx.strokeStyle = 'rgba(249,115,22,0.8)'
+        ctx.strokeStyle = 'rgba(240,160,60,0.85)'
         ctx.setLineDash([2.5, 2.5])
         ctx.lineWidth = 1
         ctx.strokeRect(cx + pad + 0.5, cy + pad + 0.5, cw - pad * 2 - 1, ch - pad * 2 - 1)
@@ -195,8 +202,34 @@ export function drawHeatmap(
     }
   }
 
+  // Cell letters, only when the cells are large enough to stay legible.
+  if (cw >= 34 && ch >= 22) {
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `9px ${font}`
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const m = view.cells[r][c]
+        const cx = x + c * cw + cw / 2
+        const cy = y + r * ch + ch / 2
+        if (!m) {
+          ctx.fillStyle = 'rgba(108,114,123,0.32)'
+          ctx.fillText(cellCoordinate(view.geometry, c, r, scan.origin).label, cx, cy)
+          continue
+        }
+        const readable =
+          m.quality_status === 'INVALID' || m.quality_status === 'SATURATED' ? false : normalise(m.signal_raw, view.scaleMin, view.scaleMax) > 0.45
+        ctx.fillStyle = readable ? 'rgba(10,11,13,0.72)' : 'rgba(233,234,236,0.72)'
+        ctx.fillText(cellCoordinate(view.geometry, c, r, scan.origin).label, cx, cy - 5)
+        ctx.font = `8.5px ${font}`
+        ctx.fillText(String(m.signal_raw), cx, cy + 5)
+        ctx.font = `9px ${font}`
+      }
+    }
+  }
+
   // Grid lines on top for legibility.
-  ctx.strokeStyle = 'rgba(41,47,64,0.9)'
+  ctx.strokeStyle = 'rgba(36,39,45,0.95)'
   ctx.lineWidth = 1
   ctx.beginPath()
   for (let c = 1; c < cols; c++) {
@@ -208,14 +241,14 @@ export function drawHeatmap(
     ctx.lineTo(x + w, Math.round(y + r * ch) + 0.5)
   }
   ctx.stroke()
-  ctx.strokeStyle = '#333B50'
+  ctx.strokeStyle = '#2b2f36'
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
 
   // Selection + hover.
   if (options.hovered) {
     const { col, row } = options.hovered
     if (col >= 0 && row >= 0 && col < cols && row < rows) {
-      ctx.strokeStyle = 'rgba(231,234,243,0.28)'
+      ctx.strokeStyle = 'rgba(233,234,236,0.22)'
       ctx.lineWidth = 1
       ctx.strokeRect(x + col * cw + 0.5, y + row * ch + 0.5, cw - 1, ch - 1)
     }
@@ -235,7 +268,7 @@ export function drawHeatmap(
 
   // Axes: X in mm along the bottom, Y in mm along the left.
   if (options.showAxis !== false) {
-    ctx.fillStyle = '#6B7285'
+    ctx.fillStyle = '#6c727b'
     ctx.font = `9.5px ${font}`
     ctx.textBaseline = 'top'
     ctx.textAlign = 'center'
@@ -244,7 +277,7 @@ export function drawHeatmap(
       const value = (scan.board_width_mm * i) / xTicks
       const px = x + (w * i) / xTicks
       ctx.fillText(String(Math.round(value * 10) / 10), px, y + h + 7)
-      ctx.strokeStyle = 'rgba(41,47,64,1)'
+      ctx.strokeStyle = 'rgba(36,39,45,1)'
       ctx.beginPath()
       ctx.moveTo(Math.round(px) + 0.5, y + h)
       ctx.lineTo(Math.round(px) + 0.5, y + h + 3)
@@ -267,7 +300,7 @@ export function drawHeatmap(
       ctx.stroke()
     }
     ctx.textAlign = 'left'
-    ctx.fillStyle = '#6B7285'
+    ctx.fillStyle = '#6c727b'
     ctx.font = `9px ${font}`
     ctx.fillText('Y mm', x - 34, y - 4)
     ctx.textAlign = 'right'
@@ -277,7 +310,7 @@ export function drawHeatmap(
   // Cell size hint
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = 'rgba(107,114,133,0.9)'
+  ctx.fillStyle = 'rgba(108,114,123,0.9)'
   ctx.font = `9px ${font}`
   ctx.fillText(`${cols} × ${rows} cells @ ${scan.grid_spacing_mm} mm`, x + 1, y - 4)
 

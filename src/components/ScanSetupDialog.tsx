@@ -55,12 +55,12 @@ export function ScanSetupDialog({ open, onClose }: { open: boolean; onClose: () 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 p-4 sm:items-center">
       <div className="absolute inset-0" onClick={onClose} aria-hidden />
-      <div className="relative z-10 w-full max-w-[520px] rounded-[14px] border border-line bg-panel shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-line-soft px-5 py-4">
+      <div className="relative z-10 w-full max-w-[520px] rounded-[12px] border border-line bg-panel shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-line-soft px-4 py-3">
           <div>
             <div className="flex items-center gap-2">
               <Grid3x3 size={15} className="text-accent" />
-              <h2 className="text-[13.5px] font-medium text-ink">New scan</h2>
+              <h2 className="text-[12.5px] font-medium text-ink">New scan</h2>
             </div>
             <p className="mt-1 text-[11px] text-ink-dim">
               Define the physical test area. The grid is generated in millimetres and every cell is a probe position.
@@ -76,7 +76,7 @@ export function ScanSetupDialog({ open, onClose }: { open: boolean; onClose: () 
           </button>
         </div>
 
-        <div className="space-y-3 px-5 py-4">
+        <div className="space-y-3 px-4 py-3">
           <Field label="Scan name">
             <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Buck converter — top side" />
           </Field>
@@ -158,7 +158,7 @@ export function ScanSetupDialog({ open, onClose }: { open: boolean; onClose: () 
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-line-soft px-5 py-3">
+        <div className="flex items-center justify-between gap-3 border-t border-line-soft px-4 py-2.5">
           <span className="text-[10.5px] text-ink-dim">Measurements are captured cell by cell from live frames.</span>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={onClose}>

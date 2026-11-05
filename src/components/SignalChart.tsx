@@ -16,6 +16,8 @@ export interface SignalChartProps {
   /** Horizontal reference line, e.g. a recorded baseline. */
   baseline?: number | null
   height?: number
+  /** Fill the parent box instead of using a fixed height. */
+  fill?: boolean
   color?: string
 }
 
@@ -23,7 +25,16 @@ export interface SignalChartProps {
  * Raw signal versus time. Only frames actually received from the device are drawn;
  * there is no synthesised series and no smoothing that could imply extra samples.
  */
-export function SignalChart({ samples, windowSeconds, unit, adcMax, baseline, height = 240, color = '#38bdf8' }: SignalChartProps) {
+export function SignalChart({
+  samples,
+  windowSeconds,
+  unit,
+  adcMax,
+  baseline,
+  height = 240,
+  fill,
+  color = '#4cc2ff',
+}: SignalChartProps) {
   const holder = useRef<HTMLDivElement | null>(null)
   const chart = useRef<echarts.ECharts | null>(null)
 
@@ -60,12 +71,12 @@ export function SignalChart({ samples, windowSeconds, unit, adcMax, baseline, he
         grid: { left: 46, right: hasFiltered ? 16 : 16, top: 16, bottom: 22 },
         tooltip: {
           trigger: 'axis',
-          backgroundColor: '#111522',
-          borderColor: '#292F40',
+          backgroundColor: '#14161a',
+          borderColor: '#2a2d33',
           borderWidth: 1,
           padding: [6, 9],
-          textStyle: { color: '#E7EAF3', fontSize: 11, fontFamily: 'JetBrains Mono Variable, monospace' },
-          axisPointer: { type: 'line', lineStyle: { color: '#3b4359' } },
+          textStyle: { color: '#e9eaec', fontSize: 10.5, fontFamily: 'JetBrains Mono Variable, monospace' },
+          axisPointer: { type: 'line', lineStyle: { color: '#31353c' } },
           formatter: (params: unknown) => {
             const list = params as { value: [number, number]; seriesName: string; color: string }[]
             if (!list.length) return ''
@@ -80,11 +91,11 @@ export function SignalChart({ samples, windowSeconds, unit, adcMax, baseline, he
           type: 'time',
           min: cutoff,
           max: Date.now(),
-          axisLine: { lineStyle: { color: '#292F40' } },
+          axisLine: { lineStyle: { color: '#24272d' } },
           axisTick: { show: false },
-          splitLine: { show: true, lineStyle: { color: '#1D2334', type: 'solid' } },
+          splitLine: { show: true, lineStyle: { color: '#191c21', type: 'solid' } },
           axisLabel: {
-            color: '#6B7285',
+            color: '#6c727b',
             fontSize: 10,
             fontFamily: 'JetBrains Mono Variable, monospace',
             formatter: (v: number) => new Date(v).toLocaleTimeString('en-GB', { hour12: false }),
@@ -97,9 +108,9 @@ export function SignalChart({ samples, windowSeconds, unit, adcMax, baseline, he
           splitNumber: 4,
           axisLine: { show: false },
           axisTick: { show: false },
-          splitLine: { lineStyle: { color: '#1D2334' } },
+          splitLine: { lineStyle: { color: '#191c21' } },
           axisLabel: {
-            color: '#6B7285',
+            color: '#6c727b',
             fontSize: 10,
             fontFamily: 'JetBrains Mono Variable, monospace',
           },
@@ -120,7 +131,7 @@ export function SignalChart({ samples, windowSeconds, unit, adcMax, baseline, he
                 x2: 0,
                 y2: 1,
                 colorStops: [
-                  { offset: 0, color: `${color}33` },
+                  { offset: 0, color: `${color}2e` },
                   { offset: 1, color: `${color}00` },
                 ],
               },
@@ -130,10 +141,10 @@ export function SignalChart({ samples, windowSeconds, unit, adcMax, baseline, he
                 ? {
                     silent: true,
                     symbol: 'none',
-                    lineStyle: { color: '#8b5cf6', width: 1, type: 'dashed', opacity: 0.7 },
+                    lineStyle: { color: '#6c727b', width: 1, type: [3, 3], opacity: 0.9 },
                     label: {
-                      formatter: 'baseline',
-                      color: '#8b5cf6',
+                      formatter: 'noise floor',
+                      color: '#9ba1aa',
                       fontSize: 9,
                       position: 'insideEndTop',
                     },
@@ -148,8 +159,8 @@ export function SignalChart({ samples, windowSeconds, unit, adcMax, baseline, he
                   type: 'line' as const,
                   showSymbol: false,
                   data: filtered,
-                  lineStyle: { width: 1.1, color: '#e7eaf3', opacity: 0.65 },
-                  itemStyle: { color: '#e7eaf3' },
+                  lineStyle: { width: 1, color: '#e9eaec', opacity: 0.5 },
+                  itemStyle: { color: '#e9eaec' },
                 },
               ]
             : []),
@@ -159,5 +170,5 @@ export function SignalChart({ samples, windowSeconds, unit, adcMax, baseline, he
     )
   }, [samples, windowSeconds, unit, adcMax, baseline, color])
 
-  return <div ref={holder} style={{ height }} className="w-full" />
+  return <div ref={holder} style={fill ? { height: '100%', width: '100%' } : { height }} className="w-full" />
 }

@@ -19,16 +19,17 @@ import { useApp } from '../store/app'
 import {
   Badge,
   Button,
-  Divider,
-  EmptyState,
   Field,
+  Frame,
+  FrameBody,
+  FrameFooter,
+  FrameHeader,
+  KeyValue,
   Metric,
-  NumberInput,
   Notice,
-  Panel,
-  PanelHeader,
-  Select,
+  NumberInput,
   Segmented,
+  Select,
   StatusDot,
   cn,
   type Tone,
@@ -47,18 +48,15 @@ function signalTone(state: SignalState): Tone {
     case 'UNKNOWN':
       return 'neutral'
     case 'UNSTABLE':
-      return 'warn'
     case 'STALE':
       return 'warn'
-    case 'SATURATED':
-      return 'danger'
-    case 'INVALID':
+    default:
       return 'danger'
   }
 }
 
 function qualityTone(q: QualityStatus): Tone {
-  return q === 'VALID' ? 'ok' : q === 'UNSTABLE' ? 'warn' : q === 'SATURATED' ? 'danger' : 'danger'
+  return q === 'VALID' ? 'ok' : q === 'UNSTABLE' ? 'warn' : 'danger'
 }
 
 export function LiveScan() {
@@ -84,7 +82,6 @@ export function LiveScan() {
     setGraphPaused,
     updateAcquisition,
     captureMeasurement,
-    deviceProbe: deviceProbeType,
     samplesReceived,
     framesRejected,
   } = useApp()
@@ -99,13 +96,12 @@ export function LiveScan() {
   const connected = deviceState === 'CONNECTED'
   const live = stats(windowSeconds)
   const latest = samples.length ? samples[samples.length - 1] : null
+  const probeType = deviceProbe ?? activeProbeType
 
   const activeScans = useMemo(
     () => scans.filter((s) => s.status === 'ACTIVE' || s.status === 'PAUSED' || s.status === 'COMPLETED'),
     [scans],
   )
-
-  const probeType = deviceProbeType ?? activeProbeType
 
   const canCapture = connected && latest !== null && signalState !== 'STALE' && latest.quality !== 'INVALID'
 
@@ -113,145 +109,125 @@ export function LiveScan() {
     const x = coordinate.x.trim() === '' ? null : Number(coordinate.x)
     const y = coordinate.y.trim() === '' ? null : Number(coordinate.y)
     if ((x !== null && !Number.isFinite(x)) || (y !== null && !Number.isFinite(y))) return
-    const measurement = await captureMeasurement({
-      scanId: captureScanId || null,
-      x_mm: x,
-      y_mm: y,
-    })
+    const measurement = await captureMeasurement({ scanId: captureScanId || null, x_mm: x, y_mm: y })
     if (measurement) {
       setLastCaptured({ raw: measurement.signal_raw, at: measurement.timestamp, quality: measurement.quality_status })
     }
   }
 
   return (
-    <div className="space-y-4">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2.5 max-xl:h-auto max-xl:grid-rows-none">
       {!connected ? (
-        <Panel className="border-dashed px-4 py-3.5">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-canvas">
-              <Usb size={16} className="text-ink-dim" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] font-medium text-ink">
-                No detector connected{' '}
-                {deviceState === 'ERROR' ? <Badge tone="danger">LINK ERROR</Badge> : null}
-              </div>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-ink-dim">
-                Live values stay blank until the detector streams frames over USB serial. Connect the board, the probe
-                and this machine, then open the link.
-              </p>
-            </div>
-            <Button variant="primary" size="md" icon={<Plug size={13} />} onClick={() => setConnectOpen(true)}>
-              Connect device
-            </Button>
-          </div>
-        </Panel>
-      ) : null}
-
-      {signalState === 'STALE' && connected ? (
-        <Notice tone="warn" title="Data is stale" icon={<TriangleAlert size={14} />}>
-          Last frame {relativeTime(lastFrameAt)} — the link is open but the device stopped sending. Values below are
-          the last received frame, not a live reading.
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border border-dashed border-line bg-panel px-3 py-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-[6px] border border-line bg-canvas">
+            <Usb size={12} className="text-ink-dim" />
+          </span>
+          <span className="text-[11.5px] font-medium text-ink">No detector connected</span>
+          {deviceState === 'ERROR' ? <Badge tone="danger">LINK ERROR</Badge> : null}
+          <span className="min-w-0 flex-1 truncate text-[10.5px] text-ink-dim">
+            Readings stay blank until the board streams frames over USB serial. Flash{' '}
+            <span className="font-mono text-ink-muted">firmware/emi_hotspot_serial.ino</span>, plug it in, then open the
+            link.
+          </span>
+          <Button variant="primary" size="md" icon={<Plug size={12} />} onClick={() => setConnectOpen(true)}>
+            Connect device
+          </Button>
+        </div>
+      ) : signalState === 'STALE' ? (
+        <Notice tone="warn" title={`Data is stale · last frame ${relativeTime(lastFrameAt)}`} icon={<TriangleAlert size={13} />}>
+          The link is open but the device stopped sending. The values below are the last received frame, not a live
+          reading.
         </Notice>
       ) : null}
 
-      {/* Readout band */}
-      <Panel>
-        <div className="grid grid-cols-2 divide-line-soft sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
-          <div className="col-span-2 border-b border-line-soft px-4 py-4 sm:col-span-1 lg:border-b-0">
+      {/* Row 1 — readout band */}
+      <Frame className="shrink-0">
+        <div className="grid grid-cols-2 divide-line-soft md:grid-cols-3 lg:grid-cols-6 lg:divide-x">
+          <div className="col-span-2 border-b border-line-soft px-3 py-2.5 md:col-span-1 lg:border-b-0">
             <div className="flex items-center justify-between gap-2">
               <span className="label-caps">Raw signal</span>
               <Badge tone={signalTone(signalState)} dot={signalState !== 'UNKNOWN'}>
-                {signalState !== 'UNKNOWN'
-                  ? signalState
-                  : latest
-                    ? 'STABILISING'
-                    : 'NO DATA'}
+                {signalState !== 'UNKNOWN' ? signalState : latest ? 'SETTLING' : 'NO DATA'}
               </Badge>
             </div>
-            <div className="mt-1.5 flex items-baseline gap-1.5">
+            <div className="mt-1 flex items-baseline gap-1.5">
               <span
                 className={cn(
-                  'tabular text-[38px] leading-none font-medium tracking-tight',
-                  latest === null ? 'text-ink-dim/50' : 'text-ink',
+                  'tabular text-[32px] leading-none font-medium',
+                  latest === null ? 'text-ink-dim/40' : 'text-ink',
                 )}
               >
                 {latest ? formatNumber(latest.signal_raw) : '—'}
               </span>
-              <span className="text-[11px] text-ink-dim">{cfg.unit}</span>
+              <span className="text-[9.5px] text-ink-dim">{cfg.unit}</span>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-[10.5px] text-ink-dim">
-              <span
-                className={cn(
-                  'inline-block h-1.5 w-1.5 rounded-full',
-                  probeType === 'E_FIELD' ? 'bg-efield' : 'bg-hfield',
-                )}
-              />
-              {probeLabel(probeType)} probe
+            <div className="mt-1.5 flex items-center gap-1.5 text-[9.5px] text-ink-dim">
+              <span className={cn('h-1.5 w-1.5 rounded-full', probeType === 'E_FIELD' ? 'bg-efield' : 'bg-hfield')} />
+              {probeLabel(probeType)}
               {latest?.sample_count ? ` · ${latest.sample_count} samples` : ''}
             </div>
           </div>
 
-          <div className="border-b border-line-soft px-4 py-4 lg:border-b-0">
-            <Metric
-              label="Filtered"
-              value={latest?.signal_filtered !== null && latest?.signal_filtered !== undefined ? formatNumber(latest.signal_filtered) : '—'}
-              unit={latest?.signal_filtered !== null && latest?.signal_filtered !== undefined ? cfg.unit : undefined}
-              hint={latest?.signal_filtered !== null && latest?.signal_filtered !== undefined ? 'reported by firmware' : 'not reported by firmware'}
-            />
-          </div>
-          <div className="border-b border-line-soft px-4 py-4 lg:border-b-0">
-            <Metric
-              label={`Peak · ${windowSeconds}s`}
-              value={formatNumber(live.window.max)}
-              unit={live.window.max !== null ? cfg.unit : undefined}
-              hint={`${live.window.count} frames in window`}
-            />
-          </div>
-          <div className="border-b border-line-soft px-4 py-4 lg:border-b-0">
-            <Metric
-              label={`Average · ${windowSeconds}s`}
-              value={formatNumber(live.window.mean, live.window.mean !== null ? 0 : 0)}
-              unit={live.window.mean !== null ? cfg.unit : undefined}
-              hint={live.window.min !== null ? `min ${formatNumber(live.window.min)}` : 'awaiting frames'}
-            />
-          </div>
-          <div className="border-b border-line-soft px-4 py-4 lg:border-b-0">
-            <Metric
-              label="Spread"
-              value={live.window.spreadPct !== null ? formatNumber(live.window.spreadPct, 1) : '—'}
-              unit={live.window.spreadPct !== null ? '%' : undefined}
-              hint={`peak-to-peak · limit ${cfg.unstable_spread_pct}%`}
-              tone={live.window.spreadPct !== null && live.window.spreadPct > cfg.unstable_spread_pct ? 'warn' : 'default'}
-            />
-          </div>
-          <div className="px-4 py-4">
-            <Metric
-              label="Baseline"
-              value={formatNumber(live.baseline, 0)}
-              unit={live.baseline !== null ? cfg.unit : undefined}
-              hint={`first ${live.baselineSamples} frames of window`}
-            />
-          </div>
+          <Metric
+            className="border-b border-line-soft px-3 py-2.5 lg:border-b-0"
+            label="Filtered"
+            size="sm"
+            value={latest?.signal_filtered != null ? formatNumber(latest.signal_filtered) : '—'}
+            unit={latest?.signal_filtered != null ? cfg.unit : undefined}
+            hint={latest?.signal_filtered != null ? 'reported by firmware' : 'not reported'}
+          />
+          <Metric
+            className="border-b border-line-soft px-3 py-2.5 lg:border-b-0"
+            label={`Peak · ${windowSeconds}s`}
+            size="sm"
+            value={formatNumber(live.window.max)}
+            unit={live.window.max !== null ? cfg.unit : undefined}
+            hint={`${live.window.count} frames`}
+          />
+          <Metric
+            className="border-b border-line-soft px-3 py-2.5 lg:border-b-0"
+            label={`Average · ${windowSeconds}s`}
+            size="sm"
+            value={formatNumber(live.window.mean, 1)}
+            unit={live.window.mean !== null ? cfg.unit : undefined}
+            hint={live.window.min !== null ? `min ${formatNumber(live.window.min)}` : 'awaiting frames'}
+          />
+          <Metric
+            className="border-b border-line-soft px-3 py-2.5 lg:border-b-0"
+            label="Spread"
+            size="sm"
+            value={live.window.spreadPct !== null ? formatNumber(live.window.spreadPct, 1) : '—'}
+            unit={live.window.spreadPct !== null ? '%' : undefined}
+            hint={`pk-pk · limit ${cfg.unstable_spread_pct}%`}
+            tone={live.window.spreadPct !== null && live.window.spreadPct > cfg.unstable_spread_pct ? 'warn' : 'default'}
+          />
+          <Metric
+            className="px-3 py-2.5"
+            label="Noise floor"
+            size="sm"
+            value={formatNumber(live.baseline, 1)}
+            unit={live.baseline !== null ? cfg.unit : undefined}
+            hint={`first ${live.baselineSamples} frames`}
+          />
         </div>
         {signalNote ? (
-          <div className="flex items-center gap-2 border-t border-line-soft px-4 py-2 text-[11px] text-elevated">
-            <CircleAlert size={12} /> {signalNote}
+          <div className="flex items-center gap-1.5 border-t border-line-soft px-3 py-1 text-[10px] text-elevated">
+            <CircleAlert size={11} /> {signalNote}
           </div>
         ) : null}
-      </Panel>
+      </Frame>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        {/* Chart */}
-        <Panel className="min-w-0">
-          <PanelHeader
+      {/* Row 2 — plot + controls */}
+      <div className="grid min-h-0 grid-cols-1 gap-2.5 xl:grid-cols-[minmax(0,1fr)_296px]">
+        <Frame className="min-h-[300px] xl:min-h-0">
+          <FrameHeader
             title="Signal versus time"
-            subtitle={`Raw ${cfg.unit} · trailing ${windowSeconds} s · ${graphPaused ? 'update paused' : 'live'}`}
-            icon={<Activity size={13} />}
+            subtitle={`Raw ${cfg.unit} · trailing ${windowSeconds} s · ${graphPaused ? 'plot frozen' : 'live'}`}
+            icon={<Activity size={12} />}
             right={
-              <div className="flex items-center gap-2">
+              <>
                 <Segmented
-                  size="sm"
+                  size="xs"
                   value={String(windowSeconds)}
                   onChange={(v) => setWindowSeconds(Number(v))}
                   options={[
@@ -262,116 +238,121 @@ export function LiveScan() {
                   ]}
                 />
                 <Button
-                  size="sm"
+                  size="xs"
                   variant="ghost"
-                  icon={graphPaused ? <Play size={12} /> : <Pause size={12} />}
+                  icon={graphPaused ? <Play size={10} /> : <Pause size={10} />}
                   onClick={() => setGraphPaused(!graphPaused)}
-                  title="Freeze the plot while frames keep streaming"
                 >
                   {graphPaused ? 'Resume' : 'Freeze'}
                 </Button>
-              </div>
+              </>
             }
           />
-          {samples.length === 0 ? (
-            <div className="px-4 py-4">
-              <EmptyState
-                icon={<Activity size={26} />}
-                title="No frames received"
-                compact
-                action={
-                  !connected ? (
-                    <Button variant="secondary" size="sm" icon={<Plug size={12} />} onClick={() => setConnectOpen(true)}>
+          <div className="min-h-0 flex-1 px-1 py-1">
+            {samples.length === 0 ? (
+              <div className="flex h-full items-center justify-center px-4">
+                <div className="max-w-sm text-center">
+                  <Activity size={22} className="mx-auto mb-2 text-ink-dim/50" />
+                  <div className="text-[11.5px] font-medium text-ink-muted">No frames received</div>
+                  <p className="mt-1 text-[10.5px] leading-relaxed text-ink-dim">
+                    The plot fills from frames arriving on the serial link. It is never pre-populated.
+                  </p>
+                  {!connected ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<Plug size={11} />}
+                      onClick={() => setConnectOpen(true)}
+                      className="mt-2"
+                    >
                       Open connection
                     </Button>
-                  ) : undefined
-                }
-              >
-                The plot fills from frames arriving on the serial link. It is never pre-populated with generated data.
-              </EmptyState>
-            </div>
-          ) : (
-            <div className="px-1.5 pt-2 pb-1">
+                  ) : null}
+                </div>
+              </div>
+            ) : (
               <ErrorBoundary label="Signal chart">
                 <SignalChart
+                  fill
                   samples={samples}
                   windowSeconds={windowSeconds}
                   unit={cfg.unit}
                   adcMax={cfg.adc_max}
                   baseline={live.baseline}
                   color={probeColor(probeType)}
-                  height={286}
                 />
               </ErrorBoundary>
-            </div>
-          )}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-soft px-4 py-2.5">
-            <div className="flex flex-wrap items-center gap-2">
+            )}
+          </div>
+          <FrameFooter className="justify-between">
+            <div className="flex items-center gap-1">
               <Button
                 size="sm"
                 variant={acquiring ? 'secondary' : 'primary'}
-                icon={<Play size={12} />}
+                icon={<Play size={10} />}
                 disabled={!connected || acquiring}
                 onClick={startAcquisition}
               >
                 Start
               </Button>
-              <Button size="sm" icon={<Pause size={12} />} disabled={!connected || !acquiring} onClick={pauseAcquisition}>
+              <Button size="sm" icon={<Pause size={10} />} disabled={!connected || !acquiring} onClick={pauseAcquisition}>
                 Pause
               </Button>
-              <Button size="sm" icon={<Square size={11} />} disabled={!connected} onClick={stopAcquisition}>
+              <Button size="sm" icon={<Square size={9} />} disabled={!connected} onClick={stopAcquisition}>
                 Stop
               </Button>
-              <Button size="sm" variant="ghost" icon={<RotateCcw size={12} />} onClick={resetSession} disabled={samples.length === 0}>
-                Reset session
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<RotateCcw size={10} />}
+                onClick={resetSession}
+                disabled={samples.length === 0}
+              >
+                Reset
               </Button>
             </div>
-            <div className="flex items-center gap-2 text-[10.5px] text-ink-dim">
+            <div className="flex items-center gap-1.5 text-[9.5px] text-ink-dim">
               <StatusDot tone={acquiring ? 'ok' : 'neutral'} pulse={acquiring} />
-              {acquiring ? 'Acquisition running' : connected ? 'Acquisition paused' : 'Idle'}
-              <span className="text-ink-dim/60">·</span>
-              <span className="tabular">{samples.length} held in memory</span>
+              {acquiring ? 'running' : connected ? 'paused' : 'idle'}
+              <span className="text-ink-dim/50">·</span>
+              <span className="tabular">{samples.length} in buffer</span>
             </div>
-          </div>
-        </Panel>
+          </FrameFooter>
+        </Frame>
 
-        {/* Right column */}
-        <div className="space-y-4">
-          <Panel>
-            <PanelHeader title="Probe" subtitle="Identity is recorded with every reading" icon={<Zap size={13} />} />
-            <div className="px-3 py-3">
+        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2.5 max-xl:grid-rows-none">
+          <Frame className="shrink-0">
+            <FrameHeader title="Probe" subtitle="recorded with every reading" icon={<Zap size={12} />} />
+            <div className="px-2.5 py-2">
               <ProbeSelector />
-              <div className="mt-3 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-ink-dim">Device reports</span>
-                  <span className="text-ink-muted">
-                    {deviceProbe ? probeLabel(deviceProbe) : connected ? 'not reported' : '—'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-ink-dim">Selected in app</span>
-                  <span className="text-ink-muted">{probeLabel(activeProbeType)}</span>
-                </div>
+              <div className="mt-1.5 flex items-center justify-between text-[9.5px] text-ink-dim">
+                <span>
+                  device reports{' '}
+                  <span className="text-ink-muted">{deviceProbe ? probeLabel(deviceProbe) : connected ? 'n/a' : '—'}</span>
+                </span>
+                <span>
+                  selected <span className="text-ink-muted">{probeLabel(activeProbeType)}</span>
+                </span>
               </div>
             </div>
-          </Panel>
+          </Frame>
 
-          <Panel>
-            <PanelHeader
-              title="Capture measurement"
-              subtitle="One reading, with coordinate and provenance"
-              icon={<Crosshair size={13} />}
+          <Frame className="min-h-[420px] xl:min-h-0">
+            <FrameHeader
+              title="Capture"
+              subtitle="one reading · coordinate + provenance"
+              icon={<Crosshair size={12} />}
             />
-            <div className="space-y-3 px-3 py-3">
-              <div className="rounded-lg border border-line bg-canvas px-2.5 py-2">
+            <FrameBody className="space-y-2 p-2.5">
+              <div className="rounded-[6px] border border-line bg-canvas px-2 py-1.5">
                 <div className="flex items-baseline justify-between">
-                  <span className="label-caps">Value to store</span>
-                  <span className="tabular text-[15px] text-ink">
+                  <span className="label-caps">value to store</span>
+                  <span className="tabular text-[13px] text-ink">
                     {canCapture && latest ? formatNumber(latest.signal_raw) : '—'}
-                    <span className="ml-1 text-[10px] text-ink-dim">{cfg.unit}</span>
+                    <span className="ml-1 text-[9px] text-ink-dim">{cfg.unit}</span>
                   </span>
                 </div>
-                <div className="mt-1 flex items-center justify-between text-[10.5px] text-ink-dim">
+                <div className="mt-1 flex items-center justify-between text-[9.5px] text-ink-dim">
                   <span>{latest ? `frame ${formatTime(latest.received_at)}` : 'no frame'}</span>
                   {latest ? <Badge tone={qualityTone(latest.quality)}>{latest.quality}</Badge> : null}
                 </div>
@@ -382,13 +363,13 @@ export function LiveScan() {
                   <option value="">Unassigned reading</option>
                   {activeScans.map((s) => (
                     <option key={s.scan_id} value={s.scan_id}>
-                      {s.scan_name} · {s.scan_id}
+                      {s.scan_name}
                     </option>
                   ))}
                 </Select>
               </Field>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 <Field label="X (mm)">
                   <NumberInput
                     placeholder="—"
@@ -407,100 +388,79 @@ export function LiveScan() {
                 </Field>
               </div>
 
-              <Button
-                variant="primary"
-                block
-                icon={<Crosshair size={13} />}
-                disabled={!canCapture}
-                onClick={() => void handleCapture()}
-              >
+              <Button variant="primary" size="md" block icon={<Crosshair size={12} />} disabled={!canCapture} onClick={() => void handleCapture()}>
                 Capture reading
               </Button>
+
               {!connected ? (
-                <p className="text-[10.5px] leading-relaxed text-ink-dim">
-                  Capture is disabled without a live link — there is nothing real to store.
+                <p className="text-[9.5px] leading-relaxed text-ink-dim">
+                  Disabled without a live link — there is nothing real to store.
                 </p>
               ) : latest?.quality === 'INVALID' ? (
-                <p className="flex items-center gap-1.5 text-[10.5px] text-strong">
-                  <Ban size={11} /> Device flagged this reading invalid.
+                <p className="flex items-center gap-1 text-[9.5px] text-strong">
+                  <Ban size={10} /> Device flagged this reading invalid.
                 </p>
               ) : (
-                <p className="text-[10.5px] leading-relaxed text-ink-dim">
+                <p className="text-[9.5px] leading-relaxed text-ink-dim">
                   Stores raw value, quality, probe, timestamp, device and acquisition settings.
                 </p>
               )}
 
               {lastCaptured ? (
-                <div className="rounded-lg border border-normal/25 bg-normal/6 px-2.5 py-2 text-[10.5px] text-ink-muted">
-                  Stored <span className="tabular text-ink">{formatNumber(lastCaptured.raw)}</span> {cfg.unit} at{' '}
+                <div className="rounded-[6px] border border-normal/25 bg-normal/6 px-2 py-1.5 text-[9.5px] text-ink-muted">
+                  Stored <span className="tabular text-ink">{formatNumber(lastCaptured.raw)}</span> at{' '}
                   {formatTime(lastCaptured.at)} · {lastCaptured.quality}
-                  <Link to="/data-log" className="ml-1 text-accent hover:underline">
-                    view log
+                  <Link to="/data-log" className="ml-1 text-accent underline-offset-2 hover:underline">
+                    log
                   </Link>
                 </div>
               ) : null}
-            </div>
-          </Panel>
 
-          <Panel>
-            <PanelHeader title="Acquisition window" subtitle="Statistics above use these settings" icon={<Activity size={13} />} />
-            <div className="grid grid-cols-2 gap-2 px-3 py-3">
-              <Field label="Averaging">
-                <NumberInput
-                  min={1}
-                  max={500}
-                  value={cfg.averaging_window}
-                  onChange={(e) => updateAcquisition({ averaging_window: Math.max(1, Number(e.target.value) || 1) })}
+              <div className="rounded-[6px] border border-line-soft px-2 py-1.5">
+                <KeyValue label="Last frame" value={relativeTime(lastFrameAt)} mono />
+                <KeyValue
+                  label="Session frames"
+                  value={
+                    <>
+                      {samplesReceived.toLocaleString('en-US')}
+                      {framesRejected > 0 ? <span className="ml-1 text-elevated">· {framesRejected} rejected</span> : null}
+                    </>
+                  }
+                  mono
                 />
-              </Field>
-              <Field label="Stale after (ms)">
-                <NumberInput
-                  min={200}
-                  step={100}
-                  value={cfg.stale_after_ms}
-                  onChange={(e) => updateAcquisition({ stale_after_ms: Math.max(200, Number(e.target.value) || 200) })}
-                />
-              </Field>
-            </div>
-            <Divider />
-            <div className="px-3 py-2.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-ink-dim">Last frame</span>
-                <span className="tabular text-ink-muted">{relativeTime(lastFrameAt)}</span>
+                <KeyValue label="Device" value={session.device_id ?? '—'} mono />
               </div>
-              <div className="mt-1 flex items-center justify-between text-[11px]">
-                <span className="text-ink-dim">Session frames</span>
-                <span className="tabular text-ink-muted">
-                  {samplesReceived.toLocaleString('en-US')}
-                  {framesRejected > 0 ? (
-                    <span className="ml-1.5 text-elevated">· {framesRejected} rejected</span>
-                  ) : null}
-                </span>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[11px]">
-                <span className="text-ink-dim">Device</span>
-                <span className="font-mono text-[10.5px] text-ink-muted">{session.device_id ?? '—'}</span>
-              </div>
-            </div>
-          </Panel>
 
-          <Panel className="border-dashed">
-            <div className="flex items-start gap-2.5 px-3 py-3">
-              <Grid3x3 size={14} className="mt-0.5 shrink-0 text-ink-dim" />
-              <div className="min-w-0">
-                <div className="text-[11.5px] text-ink-muted">Mapping a board?</div>
-                <p className="mt-0.5 text-[10.5px] leading-relaxed text-ink-dim">
-                  Create a grid scan and capture per-cell readings on the Heatmap page.
-                </p>
-                <Link
-                  to="/heatmap"
-                  className="mt-2 inline-flex items-center gap-1 text-[11px] text-accent hover:underline"
-                >
-                  Open Heatmap →
-                </Link>
+              <div className="rounded-[6px] border border-line-soft px-2 py-1.5">
+                <div className="label-caps mb-1">acquisition window</div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Field label="Averaging">
+                    <NumberInput
+                      min={1}
+                      max={500}
+                      value={cfg.averaging_window}
+                      onChange={(e) => updateAcquisition({ averaging_window: Math.max(1, Number(e.target.value) || 1) })}
+                    />
+                  </Field>
+                  <Field label="Stale (ms)">
+                    <NumberInput
+                      min={200}
+                      step={100}
+                      value={cfg.stale_after_ms}
+                      onChange={(e) => updateAcquisition({ stale_after_ms: Math.max(200, Number(e.target.value) || 200) })}
+                    />
+                  </Field>
+                </div>
               </div>
-            </div>
-          </Panel>
+            </FrameBody>
+            <FrameFooter>
+              <Grid3x3 size={11} className="shrink-0 text-ink-dim" />
+              <span className="truncate text-[9.5px] text-ink-dim">Mapping a board? Capture per cell on</span>
+              <Link to="/heatmap" className="text-[9.5px] text-accent hover:underline">
+                Heatmap
+              </Link>
+            </FrameFooter>
+          </Frame>
         </div>
       </div>
 

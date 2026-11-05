@@ -55,17 +55,17 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 p-4 sm:items-center">
       <div className="absolute inset-0" onClick={onClose} aria-hidden />
-      <div className="relative z-10 w-full max-w-[560px] rounded-[14px] border border-line bg-panel shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-line-soft px-5 py-4">
+      <div className="relative z-10 w-full max-w-[560px] rounded-[12px] border border-line bg-panel shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-line-soft px-4 py-3">
           <div>
             <div className="flex items-center gap-2">
               <Usb size={15} className="text-accent" />
-              <h2 className="text-[13.5px] font-medium text-ink">Device connection</h2>
+              <h2 className="text-[12.5px] font-medium text-ink">Device connection</h2>
               <Badge tone={connected ? 'ok' : deviceState === 'ERROR' ? 'danger' : 'neutral'} dot>
                 {deviceState}
               </Badge>
             </div>
-            <p className="mt-1 text-[11px] text-ink-dim">
+            <p className="mt-1 text-[10.5px] text-ink-dim">
               USB serial link to the detector. Values shown in the dashboard come only from frames this link delivers.
             </p>
           </div>
@@ -79,7 +79,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
           </button>
         </div>
 
-        <div className="space-y-4 px-5 py-4">
+        <div className="space-y-4 px-4 py-3">
           {!supported ? (
             <Notice
               tone="danger"
@@ -254,7 +254,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-line-soft px-5 py-3">
+        <div className="flex items-center justify-between gap-3 border-t border-line-soft px-4 py-2.5">
           <div className="flex items-center gap-2 text-[10.5px] text-ink-dim">
             <StatusDot tone={connected ? 'ok' : 'neutral'} />
             {connected ? 'Streaming' : 'Link idle'}

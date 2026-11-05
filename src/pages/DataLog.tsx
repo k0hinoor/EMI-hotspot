@@ -4,10 +4,12 @@ import { useApp } from '../store/app'
 import {
   Badge,
   Button,
-  EmptyState,
+  Divider,
+  Frame,
+  FrameBody,
+  FrameFooter,
+  FrameHeader,
   KeyValue,
-  Panel,
-  PanelHeader,
   Select,
   TextInput,
   cn,
@@ -18,7 +20,7 @@ import { formatDateTime, formatNumber, probeLabel } from '../lib/derive'
 import type { Measurement, ProbeType, QualityStatus } from '../lib/types'
 
 function qualityTone(q: QualityStatus): Tone {
-  return q === 'VALID' ? 'ok' : q === 'UNSTABLE' ? 'warn' : q === 'SATURATED' ? 'danger' : 'danger'
+  return q === 'VALID' ? 'ok' : q === 'UNSTABLE' ? 'warn' : 'danger'
 }
 
 type SortKey = 'timestamp' | 'signal' | 'coordinate'
@@ -36,79 +38,98 @@ export function DataLog() {
   const [detail, setDetail] = useState<Measurement | null>(null)
 
   const scanName = useMemo(() => new Map(scans.map((s) => [s.scan_id, s.scan_name])), [scans])
+  const filteredActive = query || probeFilter !== 'ALL' || qualityFilter !== 'ALL' || scanFilter !== 'ALL' || from || to
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     const fromTs = from ? new Date(`${from}T00:00:00`).getTime() : null
     const toTs = to ? new Date(`${to}T23:59:59`).getTime() : null
-    const rows = measurements.filter((m) => {
-      if (probeFilter !== 'ALL' && m.probe_type !== probeFilter) return false
-      if (qualityFilter !== 'ALL' && m.quality_status !== qualityFilter) return false
-      if (scanFilter !== 'ALL' && m.scan_id !== scanFilter) return false
-      const ts = new Date(m.timestamp).getTime()
-      if (fromTs !== null && ts < fromTs) return false
-      if (toTs !== null && ts > toTs) return false
-      if (!q) return true
-      const haystack = [
-        m.measurement_id,
-        m.scan_id ?? '',
-        m.scan_id ? (scanName.get(m.scan_id) ?? '') : '',
-        m.probe_id,
-        m.probe_type,
-      ]
-        .join(' ')
-        .toLowerCase()
-      return haystack.includes(q)
-    })
-    return rows.sort((a, b) => {
-      if (sort === 'signal') return b.signal_raw - a.signal_raw
-      if (sort === 'coordinate') {
-        const ax = a.x_mm ?? -1
-        const bx = b.x_mm ?? -1
-        if (ax !== bx) return ax - bx
-        return (a.y_mm ?? -1) - (b.y_mm ?? -1)
-      }
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    })
+    return measurements
+      .filter((m) => {
+        if (probeFilter !== 'ALL' && m.probe_type !== probeFilter) return false
+        if (qualityFilter !== 'ALL' && m.quality_status !== qualityFilter) return false
+        if (scanFilter !== 'ALL' && m.scan_id !== scanFilter) return false
+        const ts = new Date(m.timestamp).getTime()
+        if (fromTs !== null && ts < fromTs) return false
+        if (toTs !== null && ts > toTs) return false
+        if (!q) return true
+        return [m.measurement_id, m.scan_id ?? '', m.scan_id ? (scanName.get(m.scan_id) ?? '') : '', m.probe_id, m.probe_type]
+          .join(' ')
+          .toLowerCase()
+          .includes(q)
+      })
+      .sort((a, b) => {
+        if (sort === 'signal') return b.signal_raw - a.signal_raw
+        if (sort === 'coordinate') {
+          const ax = a.x_mm ?? -1
+          const bx = b.x_mm ?? -1
+          return ax !== bx ? ax - bx : (a.y_mm ?? -1) - (b.y_mm ?? -1)
+        }
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      })
   }, [measurements, query, probeFilter, qualityFilter, scanFilter, sort, from, to, scanName])
 
   const allSelected = filtered.length > 0 && selected.length === filtered.length
-
-  const toggleAll = () => setSelected(allSelected ? [] : filtered.map((m) => m.measurement_id))
-  const toggle = (id: string) =>
-    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+  const resetFilters = () => {
+    setFrom('')
+    setTo('')
+    setQuery('')
+    setProbeFilter('ALL')
+    setQualityFilter('ALL')
+    setScanFilter('ALL')
+  }
 
   const exportRows = () => {
     const rows = selected.length > 0 ? filtered.filter((m) => selected.includes(m.measurement_id)) : filtered
     if (rows.length === 0) return
-    const csv = measurementsToCsv(rows, scans, settings.export_defaults.csv_delimiter)
-    downloadText(`emi-measurements-${stamp()}.csv`, csv)
+    downloadText(`emi-measurements-${stamp()}.csv`, measurementsToCsv(rows, scans, settings.export_defaults.csv_delimiter))
     notify('ok', 'CSV exported', `${rows.length} measurements with provenance columns.`)
   }
 
-  const removeSelected = () => {
-    if (selected.length === 0) return
-    if (!window.confirm(`Delete ${selected.length} measurement(s)? This cannot be undone.`)) return
-    void deleteMeasurements(selected)
-    setSelected([])
-    notify('warn', 'Measurements deleted', `${selected.length} record(s) removed from local storage.`)
-  }
-
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="space-y-4">
-        <Panel>
-          <div className="flex flex-wrap items-center gap-2 border-b border-line-soft px-3 py-2.5">
-            <div className="relative min-w-[190px] flex-1">
-              <Search size={13} className="absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-dim" />
+    <div className="grid h-full min-h-0 grid-cols-1 gap-2.5 max-xl:h-auto xl:grid-cols-[minmax(0,1fr)_262px]">
+      <Frame className="min-h-[420px] xl:min-h-0">
+        <FrameHeader
+          title="Measurement log"
+          subtitle={`${filtered.length} of ${measurements.length} records · every row carries its provenance`}
+          icon={<Table2 size={12} />}
+          right={
+            <>
+              <Button size="sm" icon={<Download size={10} />} onClick={exportRows} disabled={filtered.length === 0}>
+                {selected.length > 0 ? `Export ${selected.length}` : 'Export CSV'}
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                icon={<Trash2 size={10} />}
+                onClick={() => {
+                  if (selected.length === 0) return
+                  if (!window.confirm(`Delete ${selected.length} measurement(s)? This cannot be undone.`)) return
+                  void deleteMeasurements(selected)
+                  notify('warn', 'Measurements deleted', `${selected.length} record(s) removed.`)
+                  setSelected([])
+                }}
+                disabled={selected.length === 0}
+              >
+                Delete
+              </Button>
+            </>
+          }
+        />
+
+        {/* Filter bar */}
+        <div className="shrink-0 space-y-1.5 border-b border-line-soft px-2 py-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="relative min-w-[150px] flex-1">
+              <Search size={11} className="absolute top-1/2 left-2 -translate-y-1/2 text-ink-dim" />
               <TextInput
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search reading ID, scan name or scan ID"
-                className="h-8 pl-8 text-[11.5px]"
+                placeholder="Reading ID, scan name or scan ID"
+                className="pl-7 text-[11px]"
               />
             </div>
-            <Select className="h-8 w-auto text-[11px]" value={scanFilter} onChange={(e) => setScanFilter(e.target.value)}>
+            <Select className="h-7 w-auto text-[10.5px]" value={scanFilter} onChange={(e) => setScanFilter(e.target.value)}>
               <option value="ALL">All scans</option>
               {scans.map((s) => (
                 <option key={s.scan_id} value={s.scan_id}>
@@ -117,7 +138,7 @@ export function DataLog() {
               ))}
             </Select>
             <Select
-              className="h-8 w-auto text-[11px]"
+              className="h-7 w-auto text-[10.5px]"
               value={probeFilter}
               onChange={(e) => setProbeFilter(e.target.value as typeof probeFilter)}
             >
@@ -126,7 +147,7 @@ export function DataLog() {
               <option value="H_FIELD">H-field</option>
             </Select>
             <Select
-              className="h-8 w-auto text-[11px]"
+              className="h-7 w-auto text-[10.5px]"
               value={qualityFilter}
               onChange={(e) => setQualityFilter(e.target.value as typeof qualityFilter)}
             >
@@ -136,191 +157,174 @@ export function DataLog() {
               <option value="SATURATED">Saturated</option>
               <option value="INVALID">Invalid</option>
             </Select>
-            <Select className="h-8 w-auto text-[11px]" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-              <option value="timestamp">Newest first</option>
-              <option value="signal">Highest signal</option>
-              <option value="coordinate">By coordinate</option>
+            <Select className="h-7 w-auto text-[10.5px]" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+              <option value="timestamp">Newest</option>
+              <option value="signal">Highest</option>
+              <option value="coordinate">By cell</option>
             </Select>
           </div>
-          <div className="flex flex-wrap items-center gap-2 border-b border-line-soft px-3 py-2">
-            <Filter size={12} className="text-ink-dim" />
-            <span className="label-caps !text-[9px]">Date range</span>
-            <TextInput
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="h-7 w-[132px] px-2 text-[11px]"
-            />
-            <span className="text-[10.5px] text-ink-dim">to</span>
-            <TextInput
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="h-7 w-[132px] px-2 text-[11px]"
-            />
-            {(from || to || query || probeFilter !== 'ALL' || qualityFilter !== 'ALL' || scanFilter !== 'ALL') && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Filter size={10} className="text-ink-dim" />
+            <span className="label-caps">date</span>
+            <TextInput type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-6 w-[118px] px-1.5 text-[10px]" />
+            <span className="text-[9.5px] text-ink-dim">→</span>
+            <TextInput type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-6 w-[118px] px-1.5 text-[10px]" />
+            {filteredActive ? (
               <button
                 type="button"
-                onClick={() => {
-                  setFrom('')
-                  setTo('')
-                  setQuery('')
-                  setProbeFilter('ALL')
-                  setQualityFilter('ALL')
-                  setScanFilter('ALL')
-                }}
-                className="inline-flex items-center gap-1 text-[10.5px] text-accent hover:underline"
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1 text-[9.5px] text-accent hover:underline"
               >
-                <X size={10} /> reset
+                <X size={9} /> reset
               </button>
-            )}
-            <span className="ml-auto tabular text-[10.5px] text-ink-dim">
-              {filtered.length} of {measurements.length} records
-            </span>
-            <Button size="sm" icon={<Download size={12} />} onClick={exportRows} disabled={filtered.length === 0}>
-              {selected.length > 0 ? `Export ${selected.length}` : 'Export CSV'}
-            </Button>
-            <Button size="sm" variant="danger" icon={<Trash2 size={12} />} onClick={removeSelected} disabled={selected.length === 0}>
-              Delete
-            </Button>
+            ) : null}
+            {selected.length > 0 ? <span className="text-[9.5px] text-ink-muted">{selected.length} selected</span> : null}
           </div>
+        </div>
 
+        <FrameBody noPad>
           {measurements.length === 0 ? (
-            <div className="px-4 py-4">
-              <EmptyState icon={<Table2 size={28} />} title="No measurements recorded" compact>
-                Readings appear here the moment one is captured on Live Scan or the Heatmap. There is no seeded or
-                sample data in this build.
-              </EmptyState>
+            <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+              <Table2 size={22} className="mb-2 text-ink-dim/50" />
+              <div className="text-[11.5px] font-medium text-ink-muted">No measurements recorded</div>
+              <p className="mt-1 max-w-sm text-[10.5px] leading-relaxed text-ink-dim">
+                Rows appear the moment a reading is captured on Live Scan or the Heatmap. There is no seeded or sample
+                data in this build.
+              </p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="px-4 py-10 text-center text-[11px] text-ink-dim">No records match these filters.</div>
+            <div className="flex h-full items-center justify-center text-[10.5px] text-ink-dim">
+              No records match these filters.
+            </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] border-collapse text-[11.5px]">
-                <thead>
-                  <tr className="border-b border-line-soft text-left">
-                    <th className="w-8 px-3 py-2">
+            <table className="w-full border-collapse text-[10.5px]">
+              <thead className="sticky top-0 z-10 bg-panel">
+                <tr className="border-b border-line-soft text-left">
+                  <th className="w-6 px-2 py-1.5">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={() => setSelected(allSelected ? [] : filtered.map((m) => m.measurement_id))}
+                      aria-label="Select all"
+                      className="h-2.5 w-2.5 accent-accent"
+                    />
+                  </th>
+                  {['Reading', 'Scan', 'Probe', 'X / Y', 'Signal', 'Quality', 'Timestamp'].map((h) => (
+                    <th key={h} className="label-caps px-1.5 py-1.5 whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((m) => (
+                  <tr
+                    key={m.measurement_id}
+                    onClick={() => setDetail(m)}
+                    className={cn(
+                      'cursor-pointer border-b border-line-soft/50 transition-colors hover:bg-panel-raised/60',
+                      detail?.measurement_id === m.measurement_id && 'bg-panel-raised',
+                    )}
+                  >
+                    <td className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
-                        checked={allSelected}
-                        onChange={toggleAll}
-                        aria-label="Select all"
-                        className="h-3 w-3 accent-accent"
+                        checked={selected.includes(m.measurement_id)}
+                        onChange={() =>
+                          setSelected((s) =>
+                            s.includes(m.measurement_id) ? s.filter((x) => x !== m.measurement_id) : [...s, m.measurement_id],
+                          )
+                        }
+                        aria-label={`Select ${m.measurement_id}`}
+                        className="h-2.5 w-2.5 accent-accent"
                       />
-                    </th>
-                    {['Reading', 'Scan', 'Probe', 'X / Y (mm)', 'Signal', 'Quality', 'Timestamp'].map((h) => (
-                      <th key={h} className="label-caps px-2 py-2 !text-[9px] whitespace-nowrap">
-                        {h}
-                      </th>
-                    ))}
+                    </td>
+                    <td className="px-1.5 py-1 font-mono text-[9.5px] text-ink-muted">{m.measurement_id}</td>
+                    <td className="max-w-[130px] truncate px-1.5 py-1 text-ink-muted">
+                      {m.scan_id ? (scanName.get(m.scan_id) ?? m.scan_id) : <span className="text-ink-dim">unassigned</span>}
+                    </td>
+                    <td className={cn('px-1.5 py-1', m.probe_type === 'E_FIELD' ? 'text-efield' : 'text-hfield')}>
+                      {probeLabel(m.probe_type)}
+                    </td>
+                    <td className="tabular px-1.5 py-1 text-ink-muted">{m.x_mm !== null ? `${m.x_mm} / ${m.y_mm}` : '—'}</td>
+                    <td className="tabular px-1.5 py-1 text-ink">{formatNumber(m.signal_raw)}</td>
+                    <td className="px-1.5 py-1">
+                      <Badge tone={qualityTone(m.quality_status)}>{m.quality_status}</Badge>
+                    </td>
+                    <td className="tabular px-1.5 py-1 text-[9.5px] text-ink-dim">{formatDateTime(m.timestamp)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filtered.slice(0, 400).map((m) => (
-                    <tr
-                      key={m.measurement_id}
-                      onClick={() => setDetail(m)}
-                      className={cn(
-                        'cursor-pointer border-b border-line-soft/60 transition-colors hover:bg-panel-raised/60',
-                        detail?.measurement_id === m.measurement_id && 'bg-panel-raised',
-                      )}
-                    >
-                      <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(m.measurement_id)}
-                          onChange={() => toggle(m.measurement_id)}
-                          aria-label={`Select ${m.measurement_id}`}
-                          className="h-3 w-3 accent-accent"
-                        />
-                      </td>
-                      <td className="px-2 py-1.5 font-mono text-[10.5px] text-ink-muted">{m.measurement_id}</td>
-                      <td className="max-w-[150px] truncate px-2 py-1.5 text-ink-muted">
-                        {m.scan_id ? (scanName.get(m.scan_id) ?? m.scan_id) : <span className="text-ink-dim">unassigned</span>}
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <span className={m.probe_type === 'E_FIELD' ? 'text-efield' : 'text-hfield'}>
-                          {probeLabel(m.probe_type)}
-                        </span>
-                      </td>
-                      <td className="tabular px-2 py-1.5 text-ink-muted">
-                        {m.x_mm !== null ? `${m.x_mm} / ${m.y_mm}` : '—'}
-                      </td>
-                      <td className="tabular px-2 py-1.5 text-ink">
-                        {formatNumber(m.signal_raw)}
-                        <span className="ml-1 text-[9.5px] text-ink-dim">{m.unit}</span>
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <Badge tone={qualityTone(m.quality_status)}>{m.quality_status}</Badge>
-                      </td>
-                      <td className="tabular px-2 py-1.5 text-[10.5px] text-ink-dim">{formatDateTime(m.timestamp)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filtered.length > 400 ? (
-                <div className="px-3 py-2 text-[10.5px] text-ink-dim">
-                  Showing the first 400 of {filtered.length} records — narrow the filters to inspect the rest. Exports
-                  always include every matching row.
-                </div>
-              ) : null}
-            </div>
+                ))}
+              </tbody>
+            </table>
           )}
-        </Panel>
-      </div>
+        </FrameBody>
+        <FrameFooter className="justify-between">
+          <span className="text-[9px] text-ink-dim">
+            {filtered.length} of {measurements.length} rows · exports include every matching row
+          </span>
+          <span className="text-[9px] text-ink-dim">quality codes: valid · unstable · saturated · invalid</span>
+        </FrameFooter>
+      </Frame>
 
-      <div className="space-y-4">
-        <Panel>
-          <PanelHeader
-            title="Reading detail"
-            subtitle={detail ? detail.measurement_id : 'Select a row to inspect provenance'}
-          />
+      <Frame className="min-h-0">
+        <FrameHeader title="Reading detail" subtitle={detail ? detail.measurement_id : 'select a row'} />
+        <FrameBody className="p-2.5">
           {!detail ? (
-            <div className="px-4 py-8 text-center text-[11px] leading-relaxed text-ink-dim">
-              Every reading carries its probe, scan, coordinate, timestamp, quality and acquisition settings.
+            <div className="space-y-2">
+              <p className="text-[10px] leading-relaxed text-ink-dim">
+                Every reading carries its probe, scan, coordinate, timestamp, quality and acquisition settings.
+              </p>
+              <Divider />
+              <div className="space-y-1">
+                <QualityRow tone="ok" label="VALID" text="within range and stable at capture" />
+                <QualityRow tone="warn" label="UNSTABLE" text="peak-to-peak spread above limit" />
+                <QualityRow tone="danger" label="SATURATED" text="at or above saturation count" />
+                <QualityRow tone="danger" label="INVALID" text="excluded from valid statistics" />
+              </div>
             </div>
           ) : (
-            <div className="px-4 py-3">
-              <div className="mb-2 flex items-center gap-2">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-1">
                 <Badge tone={qualityTone(detail.quality_status)}>{detail.quality_status}</Badge>
                 <Badge tone={detail.probe_type === 'E_FIELD' ? 'efield' : 'hfield'}>{probeLabel(detail.probe_type)}</Badge>
                 {detail.acquisition_metadata.superseded_by ? <Badge tone="warn">SUPERSEDED</Badge> : null}
               </div>
-              <KeyValue label="Reading ID" value={<span className="font-mono text-[10.5px]">{detail.measurement_id}</span>} />
-              <KeyValue label="Scan" value={detail.scan_id ?? 'unassigned'} mono />
-              <KeyValue label="Probe ID" value={detail.probe_id} mono />
-              <KeyValue label="Coordinate" value={detail.x_mm !== null ? `${detail.x_mm}, ${detail.y_mm} mm` : 'not mapped'} />
-              <KeyValue label="Raw signal" value={`${formatNumber(detail.signal_raw)} ${detail.unit}`} mono />
-              <KeyValue
-                label="Processed"
-                value={
-                  detail.signal_processed !== null
-                    ? `${formatNumber(detail.signal_processed, 1)} (${detail.acquisition_metadata.processed_source.toLowerCase()})`
-                    : '—'
-                }
-                mono
-              />
-              <KeyValue label="Timestamp" value={formatDateTime(detail.timestamp)} mono />
-              <KeyValue label="Device" value={detail.device_id ?? '—'} mono />
-              <KeyValue label="Profile" value={detail.calibration_profile_id ?? 'none'} mono />
-              <KeyValue
-                label="Baseline / gain"
-                value={`${detail.acquisition_metadata.baseline_value ?? '—'} / ${detail.acquisition_metadata.gain_setting ?? '—'}`}
-                mono
-              />
-              <KeyValue label="ADC full scale" value={detail.acquisition_metadata.adc_max} mono />
-              <KeyValue label="Averaging" value={detail.acquisition_metadata.averaging_window ?? '—'} mono />
-              <KeyValue label="Firmware state" value={detail.acquisition_metadata.firmware_signal_state ?? '—'} />
+              <div>
+                <KeyValue label="Reading" value={detail.measurement_id} mono />
+                <KeyValue label="Scan" value={detail.scan_id ?? 'unassigned'} mono />
+                <KeyValue label="Probe" value={detail.probe_id} mono />
+                <KeyValue label="Coordinate" value={detail.x_mm !== null ? `${detail.x_mm}, ${detail.y_mm} mm` : 'not mapped'} mono />
+                <KeyValue label="Raw signal" value={`${formatNumber(detail.signal_raw)} ${detail.unit}`} mono />
+                <KeyValue
+                  label="Processed"
+                  value={
+                    detail.signal_processed !== null
+                      ? `${formatNumber(detail.signal_processed, 1)} · ${detail.acquisition_metadata.processed_source.toLowerCase()}`
+                      : '—'
+                  }
+                  mono
+                />
+                <KeyValue label="Timestamp" value={formatDateTime(detail.timestamp)} mono />
+                <KeyValue label="Device" value={detail.device_id ?? '—'} mono />
+                <KeyValue label="Profile" value={detail.calibration_profile_id ?? 'none'} mono />
+                <KeyValue
+                  label="Baseline / gain"
+                  value={`${detail.acquisition_metadata.baseline_value ?? '—'} / ${detail.acquisition_metadata.gain_setting ?? '—'}`}
+                  mono
+                />
+                <KeyValue label="ADC full scale" value={detail.acquisition_metadata.adc_max} mono />
+                <KeyValue label="Averaging" value={detail.acquisition_metadata.averaging_window ?? '—'} mono />
+                <KeyValue label="Firmware state" value={detail.acquisition_metadata.firmware_signal_state ?? '—'} />
+              </div>
               {detail.acquisition_metadata.superseded_by ? (
-                <div className="mt-2 rounded-md border border-elevated/30 bg-elevated/8 px-2 py-1.5 text-[10.5px] text-elevated">
+                <div className="rounded-[5px] border border-elevated/25 bg-elevated/6 px-2 py-1 text-[9.5px] leading-snug text-elevated">
                   Replaced by {detail.acquisition_metadata.superseded_by} when the cell was re-measured.
                 </div>
               ) : null}
-              <div className="mt-3 flex gap-2">
+              <div className="flex gap-1.5">
                 <Button
                   size="sm"
-                  variant="secondary"
-                  icon={<Ban size={11} />}
+                  icon={<Ban size={10} />}
                   disabled={detail.quality_status === 'INVALID'}
                   onClick={() => {
                     void markInvalid(detail.measurement_id)
@@ -328,17 +332,17 @@ export function DataLog() {
                     notify('warn', 'Marked invalid', `${detail.measurement_id} excluded from valid statistics.`)
                   }}
                 >
-                  Mark invalid
+                  Invalid
                 </Button>
                 <Button
                   size="sm"
                   variant="danger"
-                  icon={<Trash2 size={11} />}
+                  icon={<Trash2 size={10} />}
                   onClick={() => {
                     if (!window.confirm(`Delete ${detail.measurement_id}?`)) return
                     void deleteMeasurements([detail.measurement_id])
-                    setDetail(null)
                     setSelected((s) => s.filter((id) => id !== detail.measurement_id))
+                    setDetail(null)
                   }}
                 >
                   Delete
@@ -346,30 +350,17 @@ export function DataLog() {
               </div>
             </div>
           )}
-        </Panel>
+        </FrameBody>
+      </Frame>
+    </div>
+  )
+}
 
-        <Panel className="px-3 py-2.5">
-          <div className="label-caps mb-1.5">Quality codes</div>
-          <div className="space-y-1.5 text-[10.5px] leading-relaxed text-ink-dim">
-            <div className="flex gap-2">
-              <Badge tone="ok">VALID</Badge>
-              <span>Within range and stable at capture.</span>
-            </div>
-            <div className="flex gap-2">
-              <Badge tone="warn">UNSTABLE</Badge>
-              <span>Peak-to-peak spread exceeded the limit.</span>
-            </div>
-            <div className="flex gap-2">
-              <Badge tone="danger">SATURATED</Badge>
-              <span>At or above the saturation count.</span>
-            </div>
-            <div className="flex gap-2">
-              <Badge tone="danger">INVALID</Badge>
-              <span>Excluded from valid statistics.</span>
-            </div>
-          </div>
-        </Panel>
-      </div>
+function QualityRow({ tone, label, text }: { tone: Tone; label: string; text: string }) {
+  return (
+    <div className="flex items-start gap-1.5">
+      <Badge tone={tone}>{label}</Badge>
+      <span className="mt-[1px] text-[9.5px] leading-snug text-ink-dim">{text}</span>
     </div>
   )
 }

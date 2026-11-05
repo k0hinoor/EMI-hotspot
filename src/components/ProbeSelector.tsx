@@ -30,7 +30,7 @@ export function ProbeSelector({ compact }: { compact?: boolean }) {
               if (deviceState === 'CONNECTED') void sendCommand(`#PROBE ${opt.type}`)
             }}
             className={cn(
-              'group relative flex items-start gap-2.5 rounded-[10px] border px-3 py-2.5 text-left transition-colors',
+              'group relative flex items-start gap-2 rounded-[7px] border px-2 py-1.5 text-left transition-colors',
               active
                 ? opt.type === 'E_FIELD'
                   ? 'border-efield/45 bg-efield/8'
@@ -40,7 +40,7 @@ export function ProbeSelector({ compact }: { compact?: boolean }) {
             aria-pressed={active}
           >
             <Icon
-              size={15}
+              size={13}
               strokeWidth={1.9}
               className={cn(
                 'mt-0.5 shrink-0',
@@ -48,10 +48,10 @@ export function ProbeSelector({ compact }: { compact?: boolean }) {
               )}
             />
             <span className="min-w-0">
-              <span className={cn('block text-[12px] font-medium', active ? 'text-ink' : 'text-ink-muted')}>
+              <span className={cn('block text-[11px] font-medium', active ? 'text-ink' : 'text-ink-muted')}>
                 {opt.label}
               </span>
-              <span className="block text-[10.5px] leading-tight text-ink-dim">{opt.sub}</span>
+              <span className="block text-[9px] leading-tight text-ink-dim">{opt.sub}</span>
             </span>
             {locked && deviceProbe === opt.type ? (
               <span className="absolute top-2 right-2 rounded border border-line px-1 font-mono text-[8.5px] tracking-wider text-ink-dim">

@@ -9,20 +9,20 @@ import type { Scan } from '../lib/types'
 echarts.use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const axisLabel = {
-  color: '#6B7285',
-  fontSize: 10,
+  color: '#6c727b',
+  fontSize: 9.5,
   fontFamily: 'JetBrains Mono Variable, monospace',
 }
 
 const tooltipBase = {
-  backgroundColor: '#111522',
-  borderColor: '#292F40',
+  backgroundColor: '#14161a',
+  borderColor: '#2a2d33',
   borderWidth: 1,
   padding: [6, 9] as [number, number],
-  textStyle: { color: '#E7EAF3', fontSize: 11, fontFamily: 'JetBrains Mono Variable, monospace' },
+  textStyle: { color: '#e9eaec', fontSize: 10.5, fontFamily: 'JetBrains Mono Variable, monospace' },
 }
 
-function useChart(option: unknown, height: number, deps: unknown[]) {
+function useChart(option: unknown, height: number, deps: unknown[], fill?: boolean) {
   const holder = useRef<HTMLDivElement | null>(null)
   const chart = useRef<echarts.ECharts | null>(null)
 
@@ -44,11 +44,11 @@ function useChart(option: unknown, height: number, deps: unknown[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
-  return <div ref={holder} style={{ height }} className="w-full" />
+  return <div ref={holder} style={fill ? { height: '100%', width: '100%' } : { height }} className="w-full" />
 }
 
 /** Histogram of reading values, coloured with the same ramp as the heatmap. */
-export function CellHistogram({ values, unit, adcMax }: { values: number[]; unit: string; adcMax: number }) {
+export function CellHistogram({ values, unit, adcMax, fill }: { values: number[]; unit: string; adcMax: number; fill?: boolean }) {
   const option = useMemo(() => {
     const binCount = Math.min(24, Math.max(6, Math.round(Math.sqrt(values.length))))
     const min = Math.min(...values)
@@ -73,13 +73,13 @@ export function CellHistogram({ values, unit, adcMax }: { values: number[]; unit
           const list = params as { dataIndex: number; value: number }[]
           const p = list[0]
           if (!p) return ''
-          return `<div style="font-size:10px;color:#98A0B3">≈ ${categories[p.dataIndex]} ${unit}</div><div>${p.value} readings</div>`
+          return `<div style="font-size:10px;color:#9ba1aa">≈ ${categories[p.dataIndex]} ${unit}</div><div>${p.value} readings</div>`
         },
       },
       xAxis: {
         type: 'category',
         data: categories,
-        axisLine: { lineStyle: { color: '#292F40' } },
+        axisLine: { lineStyle: { color: '#24272d' } },
         axisTick: { show: false },
         axisLabel: { ...axisLabel, interval: Math.max(0, Math.floor(binCount / 6) - 1) },
       },
@@ -87,7 +87,7 @@ export function CellHistogram({ values, unit, adcMax }: { values: number[]; unit
         type: 'value',
         axisLine: { show: false },
         axisTick: { show: false },
-        splitLine: { lineStyle: { color: '#1D2334' } },
+        splitLine: { lineStyle: { color: '#191c21' } },
         axisLabel,
       },
       series: [
@@ -103,11 +103,11 @@ export function CellHistogram({ values, unit, adcMax }: { values: number[]; unit
     }
   }, [values, unit, adcMax])
 
-  return useChart(option, 220, [option])
+  return useChart(option, 220, [option], fill)
 }
 
 /** Grouped comparison. Each probe type keeps its own axis — never a shared scale. */
-export function ScanCompareBars({ rows }: { rows: { scan: Scan; summary: ScanSummary }[] }) {
+export function ScanCompareBars({ rows, fill }: { rows: { scan: Scan; summary: ScanSummary }[]; fill?: boolean }) {
   const option = useMemo(() => {
     const names = rows.map((r) => r.scan.scan_name)
     const maxes = rows.map((r) => (r.summary.max ? r.summary.max.signal_raw : null))
@@ -132,7 +132,7 @@ export function ScanCompareBars({ rows }: { rows: { scan: Scan; summary: ScanSum
             .filter((p) => p.value !== null)
             .map((p) => `<div style="display:flex;gap:10px;justify-content:space-between"><span>${p.seriesName}</span><span>${Math.round(p.value as number)}</span></div>`)
             .join('')
-          const meta = `<div style="font-size:9.5px;color:#6B7285;margin-top:3px">${scan.scan.probe_type === 'E_FIELD' ? 'E-field' : 'H-field'} · ${scan.summary.measuredCells} cells · ${scan.summary.coveragePct.toFixed(0)}% coverage</div>`
+          const meta = `<div style="font-size:9.5px;color:#6c727b;margin-top:3px">${scan.scan.probe_type === 'E_FIELD' ? 'E-field' : 'H-field'} · ${scan.summary.measuredCells} cells · ${scan.summary.coveragePct.toFixed(0)}% coverage</div>`
           return head + body + meta
         },
       },
@@ -141,12 +141,12 @@ export function ScanCompareBars({ rows }: { rows: { scan: Scan; summary: ScanSum
         right: 0,
         itemWidth: 8,
         itemHeight: 8,
-        textStyle: { color: '#98A0B3', fontSize: 10 },
+        textStyle: { color: '#9ba1aa', fontSize: 9.5 },
       },
       xAxis: {
         type: 'category',
         data: names,
-        axisLine: { lineStyle: { color: '#292F40' } },
+        axisLine: { lineStyle: { color: '#24272d' } },
         axisTick: { show: false },
         axisLabel: { ...axisLabel, width: 90, overflow: 'truncate', interval: 0 },
       },
@@ -154,22 +154,22 @@ export function ScanCompareBars({ rows }: { rows: { scan: Scan; summary: ScanSum
         {
           type: 'value',
           name: 'E-field',
-          nameTextStyle: { color: '#38BDF8', fontSize: 9, align: 'left' },
+          nameTextStyle: { color: '#4cc2ff', fontSize: 8.5, align: 'left' },
           axisLine: { show: false },
           axisTick: { show: false },
-          splitLine: { lineStyle: { color: '#1D2334' } },
-          axisLabel: { ...axisLabel, color: hasE ? '#6B7285' : '#3a4254' },
+          splitLine: { lineStyle: { color: '#191c21' } },
+          axisLabel: { ...axisLabel, color: hasE ? '#6c727b' : '#33373d' },
         },
         {
           type: 'value',
           name: 'H-field',
           show: hasH,
           position: 'right',
-          nameTextStyle: { color: '#C084FC', fontSize: 9, align: 'right' },
+          nameTextStyle: { color: '#b98bff', fontSize: 8.5, align: 'right' },
           axisLine: { show: false },
           axisTick: { show: false },
           splitLine: { show: false },
-          axisLabel: { ...axisLabel, color: hasH ? '#6B7285' : '#3a4254' },
+          axisLabel: { ...axisLabel, color: hasH ? '#6c727b' : '#33373d' },
         },
       ],
       series: [
@@ -179,7 +179,7 @@ export function ScanCompareBars({ rows }: { rows: { scan: Scan; summary: ScanSum
           barMaxWidth: 20,
           data: rows.map((r, i) => ({
             value: r.scan.probe_type === 'E_FIELD' ? maxes[i] : null,
-            itemStyle: { color: '#38BDF8', borderRadius: [2, 2, 0, 0] },
+            itemStyle: { color: '#4cc2ff', borderRadius: [1, 1, 0, 0] },
           })),
         },
         {
@@ -188,7 +188,7 @@ export function ScanCompareBars({ rows }: { rows: { scan: Scan; summary: ScanSum
           barMaxWidth: 20,
           data: rows.map((r, i) => ({
             value: r.scan.probe_type === 'E_FIELD' ? means[i] : null,
-            itemStyle: { color: 'rgba(56,189,248,0.34)', borderRadius: [2, 2, 0, 0] },
+            itemStyle: { color: 'rgba(76,194,255,0.3)', borderRadius: [1, 1, 0, 0] },
           })),
         },
         {
@@ -198,7 +198,7 @@ export function ScanCompareBars({ rows }: { rows: { scan: Scan; summary: ScanSum
           barMaxWidth: 20,
           data: rows.map((r, i) => ({
             value: r.scan.probe_type === 'H_FIELD' ? maxes[i] : null,
-            itemStyle: { color: '#C084FC', borderRadius: [2, 2, 0, 0] },
+            itemStyle: { color: '#b98bff', borderRadius: [1, 1, 0, 0] },
           })),
         },
         {
@@ -208,12 +208,12 @@ export function ScanCompareBars({ rows }: { rows: { scan: Scan; summary: ScanSum
           barMaxWidth: 20,
           data: rows.map((r, i) => ({
             value: r.scan.probe_type === 'H_FIELD' ? means[i] : null,
-            itemStyle: { color: 'rgba(192,132,252,0.34)', borderRadius: [2, 2, 0, 0] },
+            itemStyle: { color: 'rgba(185,139,255,0.3)', borderRadius: [1, 1, 0, 0] },
           })),
         },
       ],
     }
   }, [rows])
 
-  return useChart(option, 260, [option])
+  return useChart(option, 260, [option], fill)
 }

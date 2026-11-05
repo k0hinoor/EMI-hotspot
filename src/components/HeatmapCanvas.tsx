@@ -10,6 +10,7 @@ export function HeatmapCanvas({
   onSelect,
   scaleMax,
   height = 460,
+  fill,
   onCanvasReady,
 }: {
   scan: Scan
@@ -19,6 +20,8 @@ export function HeatmapCanvas({
   onSelect: (cell: { col: number; row: number } | null) => void
   scaleMax?: number
   height?: number
+  /** Track the parent box height instead of a fixed pixel height. */
+  fill?: boolean
   onCanvasReady?: (canvas: HTMLCanvasElement | null) => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -35,13 +38,18 @@ export function HeatmapCanvas({
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    const observer = new ResizeObserver(() => {
+    const measure = () => {
       const rect = el.getBoundingClientRect()
-      setSize({ width: Math.max(320, rect.width), height })
-    })
+      setSize({
+        width: Math.max(280, rect.width),
+        height: Math.max(220, fill ? rect.height : height),
+      })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [height])
+  }, [height, fill])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -50,7 +58,7 @@ export function HeatmapCanvas({
     canvas.width = size.width * dpr
     canvas.height = size.height * dpr
     canvas.style.width = `${size.width}px`
-    canvas.style.height = `${size.height}px`
+    canvas.style.height = fill ? '100%' : `${size.height}px`
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -60,7 +68,8 @@ export function HeatmapCanvas({
     drawHeatmap(ctx, size.width, size.height, scan, view, {
       selected,
       interpolate,
-      hovered,
+      hovered:
+        hovered && hovered.col < view.geometry.cols && hovered.row < view.geometry.rows ? hovered : null,
     })
   }, [scan, measurements, selected, interpolate, size, hovered, scaleMax])
 
@@ -72,16 +81,16 @@ export function HeatmapCanvas({
     const py = event.clientY - rect.top
     const view = viewRef.current
     if (!view) return null
-    const plot = plotRect(size.width, size.height, scan)
+    const plot = plotRect(size.width, size.height, scan, view.geometry.rows)
     return cellAtPoint(view, px, py, plot)
   }
 
   return (
-    <div ref={wrapRef} className="relative w-full">
+    <div ref={wrapRef} className={fill ? 'relative h-full w-full' : 'relative w-full'}>
       <canvas
         ref={canvasRef}
-        className="block w-full cursor-crosshair rounded-[8px]"
-        style={{ height }}
+        className="block w-full cursor-crosshair rounded-[6px]"
+        style={fill ? { height: '100%' } : { height }}
         onMouseMove={(e) => setHovered(toCell(e))}
         onMouseLeave={() => setHovered(null)}
         onClick={(e) => {

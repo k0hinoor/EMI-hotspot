@@ -15,7 +15,7 @@ export function ToastStack() {
   if (toasts.length === 0) return null
 
   return (
-    <div className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-[320px] flex-col gap-2">
+    <div className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-[300px] flex-col gap-2">
       {toasts.map((toast) => {
         const style = toneStyles[toast.tone]
         const Icon = style.icon
@@ -23,14 +23,14 @@ export function ToastStack() {
           <div
             key={toast.id}
             className={cn(
-              'pointer-events-auto flex items-start gap-2.5 rounded-[10px] border bg-panel/97 px-3 py-2.5 shadow-2xl backdrop-blur',
+              'pointer-events-auto flex items-start gap-2.5 rounded-[8px] border bg-panel/97 px-2.5 py-2 shadow-2xl backdrop-blur',
               style.ring,
             )}
           >
             <Icon size={15} className={cn('mt-px shrink-0', style.text)} />
             <div className="min-w-0 flex-1">
-              <div className="text-[12px] font-medium text-ink">{toast.title}</div>
-              {toast.detail ? <div className="mt-0.5 text-[11px] leading-snug text-ink-dim">{toast.detail}</div> : null}
+              <div className="text-[11.5px] font-medium text-ink">{toast.title}</div>
+              {toast.detail ? <div className="mt-0.5 text-[10px] leading-snug text-ink-dim">{toast.detail}</div> : null}
             </div>
             <button
               type="button"

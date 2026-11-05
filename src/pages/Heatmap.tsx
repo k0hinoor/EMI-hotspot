@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Ban,
   Check,
@@ -9,22 +9,21 @@ import {
   Grid3x3,
   ImageDown,
   Layers,
-  Map as MapIcon,
   Plus,
   RefreshCw,
   Ruler,
-  ScanLine,
   Trophy,
 } from 'lucide-react'
 import { measurementsForScan, useApp } from '../store/app'
 import {
   Badge,
   Button,
-  EmptyState,
+  Divider,
+  Frame,
+  FrameBody,
+  FrameFooter,
+  FrameHeader,
   KeyValue,
-  Notice,
-  Panel,
-  PanelHeader,
   Segmented,
   Select,
   StatusDot,
@@ -78,13 +77,10 @@ export function HeatmapPage() {
   const [viewMode, setViewMode] = useState<'measured' | 'interpolated'>(
     settings.interpolation ? 'interpolated' : 'measured',
   )
-  const [capturing, setCapturing] = useState(false)
   const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null)
+  const onCanvasReady = useCallback((el: HTMLCanvasElement | null) => setCanvasEl(el), [])
 
-  const scan = useMemo(
-    () => scans.find((s) => s.scan_id === activeScanId) ?? scans[0] ?? null,
-    [scans, activeScanId],
-  )
+  const scan = useMemo(() => scans.find((s) => s.scan_id === activeScanId) ?? scans[0] ?? null, [scans, activeScanId])
 
   useEffect(() => {
     if (scan && scan.scan_id !== activeScanId) setActiveScan(scan.scan_id)
@@ -113,15 +109,14 @@ export function HeatmapPage() {
         list.push({ measurement: m, label: cellCoordinate(view.geometry, c, r, scan.origin).label })
       }),
     )
-    return list.sort((a, b) => b.measurement.signal_raw - a.measurement.signal_raw).slice(0, 6)
+    return list.sort((a, b) => b.measurement.signal_raw - a.measurement.signal_raw).slice(0, 8)
   }, [scan, scanMeasurements])
 
   const latest = samples.length ? samples[samples.length - 1] : null
   const selected = scan && selectedCell ? cellCoordinate(geometry!, selectedCell.col, selectedCell.row, scan.origin) : null
   const selectedMeasurement = useMemo(() => {
     if (!scan || !selectedCell) return null
-    const view = buildHeatmapView(scan, scanMeasurements)
-    return view.cells[selectedCell.row]?.[selectedCell.col] ?? null
+    return buildHeatmapView(scan, scanMeasurements).cells[selectedCell.row]?.[selectedCell.col] ?? null
   }, [scan, scanMeasurements, selectedCell])
 
   const canCapture =
@@ -129,52 +124,21 @@ export function HeatmapPage() {
 
   const capture = async () => {
     if (!scan || !selectedCell || !selected) return
-    setCapturing(true)
-    const result = await captureMeasurement({
-      scanId: scan.scan_id,
-      x_mm: selected.x_mm,
-      y_mm: selected.y_mm,
-    })
-    setCapturing(false)
+    const result = await captureMeasurement({ scanId: scan.scan_id, x_mm: selected.x_mm, y_mm: selected.y_mm })
     if (result) notify('ok', `Cell ${selected.label} recorded`, `${formatNumber(result.signal_raw)} ${result.unit} · ${result.quality_status}`)
   }
 
-  if (!scan) {
-    return (
-      <div className="grid gap-4">
-        <Panel className="px-4 py-4">
-          <EmptyState
-            icon={<Grid3x3 size={30} />}
-            title="No scan created"
-            action={
-              <Button variant="primary" icon={<Plus size={13} />} onClick={() => setSetupOpen(true)}>
-                Create scan area
-              </Button>
-            }
-          >
-            Define the test area in millimetres and a grid spacing. The workspace stays empty until real measurements
-            are captured at coordinates — no heatmap is drawn from assumed data.
-          </EmptyState>
-        </Panel>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[
-            ['1 · Define area', 'Board width and height in mm, plus the grid spacing you can reliably probe.'],
-            ['2 · Position probe', 'Move the physical probe to the selected cell, keep height and orientation constant.'],
-            ['3 · Capture', 'Store the live reading against that coordinate; unmeasured cells stay visibly empty.'],
-          ].map(([title, body]) => (
-            <Panel key={title} className="px-4 py-3.5">
-              <div className="text-[12px] font-medium text-ink">{title}</div>
-              <p className="mt-1 text-[11px] leading-relaxed text-ink-dim">{body}</p>
-            </Panel>
-          ))}
-        </div>
-        <ScanSetupDialog open={setupOpen} onClose={() => setSetupOpen(false)} />
-      </div>
+  const exportCsv = () => {
+    if (!scan) return
+    downloadText(
+      `emi-scan-${scan.scan_id}-${stamp()}.csv`,
+      measurementsToCsv(scanMeasurements, scans, settings.export_defaults.csv_delimiter),
     )
+    notify('ok', 'Heatmap data exported', `${scanMeasurements.length} measurements written to CSV.`)
   }
 
   const exportPng = () => {
-    if (!canvasEl) return
+    if (!canvasEl || !scan) return
     canvasEl.toBlob((blob) => {
       if (!blob) {
         notify('error', 'Image export failed', 'The canvas could not be encoded.')
@@ -185,387 +149,399 @@ export function HeatmapPage() {
     }, 'image/png')
   }
 
-  const exportCsv = () => {
-    const csv = measurementsToCsv(scanMeasurements, scans, settings.export_defaults.csv_delimiter)
-    downloadText(`emi-scan-${scan.scan_id}-${stamp()}.csv`, csv)
-    notify('ok', 'Heatmap data exported', `${scanMeasurements.length} measurements written to CSV.`)
+  if (!scan) {
+    return (
+      <div className="h-full">
+        <Frame className="h-full">
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <Grid3x3 size={26} className="text-ink-dim/60" />
+            <div>
+              <div className="text-[13px] font-medium text-ink-muted">No scan created</div>
+              <p className="mx-auto mt-1 max-w-md text-[11px] leading-relaxed text-ink-dim">
+                Define the test area in millimetres and a probe spacing. The workspace stays empty until real
+                measurements are captured at coordinates — no heatmap is drawn from assumed data.
+              </p>
+            </div>
+            <Button variant="primary" size="md" icon={<Plus size={12} />} onClick={() => setSetupOpen(true)}>
+              Create scan area
+            </Button>
+            <div className="mt-2 grid max-w-2xl gap-2 text-left sm:grid-cols-3">
+              {[
+                ['1 · Define area', 'Width, height and grid spacing in mm.'],
+                ['2 · Position probe', 'Move to the selected cell; keep height and angle fixed.'],
+                ['3 · Capture', 'Store the live frame against that coordinate.'],
+              ].map(([title, body]) => (
+                <div key={title} className="rounded-[7px] border border-line-soft px-2.5 py-2">
+                  <div className="text-[10.5px] font-medium text-ink">{title}</div>
+                  <p className="mt-0.5 text-[9.5px] leading-snug text-ink-dim">{body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Frame>
+        <ScanSetupDialog open={setupOpen} onClose={() => setSetupOpen(false)} />
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-4">
-      {/* Scan toolbar */}
-      <Panel className="px-3 py-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            className="h-8 w-auto min-w-[210px] max-w-[300px] text-[11.5px]"
-            value={scan.scan_id}
-            onChange={(e) => setActiveScan(e.target.value)}
-          >
-            {scans.map((s) => (
-              <option key={s.scan_id} value={s.scan_id}>
-                {s.scan_name} · {s.scan_id}
-              </option>
-            ))}
-          </Select>
-          <Badge tone={scan.status === 'COMPLETED' ? 'ok' : scan.status === 'ACTIVE' ? 'accent' : 'warn'}>
-            {scan.status}
-          </Badge>
-          <Badge tone={scan.probe_type === 'E_FIELD' ? 'efield' : 'hfield'}>
-            {probeLabel(scan.probe_type)}
-          </Badge>
-          <span className="hidden items-center gap-1.5 font-mono text-[10.5px] text-ink-dim sm:inline-flex">
-            <Ruler size={11} />
-            {scan.board_width_mm} × {scan.board_height_mm} mm · {scan.grid_spacing_mm} mm grid · {geometry!.cols}×{geometry!.rows}
-          </span>
-          <div className="ml-auto flex items-center gap-1.5">
-            <Button size="sm" variant="ghost" icon={<Plus size={12} />} onClick={() => setSetupOpen(true)}>
-              New scan
-            </Button>
-            {scan.status !== 'COMPLETED' ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Check size={12} />}
-                onClick={() => void setScanStatus(scan.scan_id, 'COMPLETED')}
-                disabled={scanMeasurements.length === 0}
-                title={scanMeasurements.length === 0 ? 'Capture at least one measurement first' : 'Mark scan complete'}
-              >
-                Complete
+    <div className="grid h-full min-h-0 grid-cols-1 gap-2.5 max-xl:h-auto xl:grid-cols-[214px_minmax(0,1fr)_252px]">
+      {/* ---------------- left: scan selection + setup ---------------- */}
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2.5 max-xl:grid-rows-none">
+        <Frame className="shrink-0">
+          <FrameHeader
+            title="Scan"
+            subtitle={scan.scan_id}
+            right={
+              <>
+                <Badge tone={scan.status === 'COMPLETED' ? 'ok' : scan.status === 'ACTIVE' ? 'accent' : 'warn'}>
+                  {scan.status}
+                </Badge>
+                <Badge tone={scan.probe_type === 'E_FIELD' ? 'efield' : 'hfield'}>{probeLabel(scan.probe_type)}</Badge>
+              </>
+            }
+          />
+          <div className="space-y-1.5 p-2">
+            <Select
+              value={scan.scan_id}
+              onChange={(e) => setActiveScan(e.target.value)}
+              className="h-7 text-[11px]"
+            >
+              {scans.map((s) => (
+                <option key={s.scan_id} value={s.scan_id}>
+                  {s.scan_name} · {s.scan_id}
+                </option>
+              ))}
+            </Select>
+            <div className="flex gap-1.5">
+              <Button size="sm" variant="ghost" icon={<Plus size={10} />} onClick={() => setSetupOpen(true)} className="flex-1">
+                New
               </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<RefreshCw size={12} />}
-                onClick={() => void setScanStatus(scan.scan_id, 'ACTIVE')}
-              >
-                Reopen
-              </Button>
-            )}
-          </div>
-        </div>
-      </Panel>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_336px]">
-        <div className="space-y-4">
-          <Panel>
-            <PanelHeader
-              title="Mapping workspace"
-              subtitle={
-                summary && summary.measuredCells > 0
-                  ? `${summary.measuredCells} of ${summary.totalCells} cells measured · ${summary.coveragePct.toFixed(0)}% coverage`
-                  : 'No cells measured yet — the grid is empty'
-              }
-              icon={<MapIcon size={13} />}
-              right={
-                <Segmented
+              {scan.status !== 'COMPLETED' ? (
+                <Button
                   size="sm"
-                  value={viewMode}
-                  onChange={(v) => {
-                    setViewMode(v)
-                    updateSettings({ interpolation: v === 'interpolated' })
-                  }}
-                  options={[
-                    { value: 'measured', label: 'Measured only' },
-                    { value: 'interpolated', label: 'Interpolated' },
-                  ]}
-                />
-              }
-            />
-            <div className="px-3 py-3">
-              <HeatmapCanvas
-                scan={scan}
-                measurements={scanMeasurements}
-                selected={selectedCell}
-                interpolate={viewMode === 'interpolated'}
-                onSelect={selectCell}
-                height={470}
-                onCanvasReady={setCanvasEl}
+                  variant="secondary"
+                  icon={<Check size={10} />}
+                  onClick={() => void setScanStatus(scan.scan_id, 'COMPLETED')}
+                  disabled={scanMeasurements.length === 0}
+                  title={scanMeasurements.length === 0 ? 'Capture at least one measurement first' : 'Mark complete'}
+                  className="flex-1"
+                >
+                  Complete
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<RefreshCw size={10} />}
+                  onClick={() => void setScanStatus(scan.scan_id, 'ACTIVE')}
+                  className="flex-1"
+                >
+                  Reopen
+                </Button>
+              )}
+            </div>
+          </div>
+        </Frame>
+
+        <Frame className="min-h-0">
+          <FrameHeader title="Geometry" subtitle="from the scan definition" icon={<Ruler size={12} />} />
+          <FrameBody className="p-2.5">
+            <KeyValue label="Width" value={`${scan.board_width_mm} mm`} mono />
+            <KeyValue label="Height" value={`${scan.board_height_mm} mm`} mono />
+            <KeyValue label="Spacing" value={`${scan.grid_spacing_mm} mm`} mono />
+            <KeyValue label="Cells" value={`${geometry!.cols} × ${geometry!.rows} = ${geometry!.totalCells}`} mono />
+            <KeyValue label="Cell size" value={`${geometry!.cellWidth.toFixed(1)} × ${geometry!.cellHeight.toFixed(1)} mm`} mono />
+            <KeyValue label="Origin" value={scan.origin === 'TOP_LEFT' ? 'top-left' : 'bottom-left'} />
+            <KeyValue label="Probe" value={scan.probe_id} mono />
+            <KeyValue label="Profile" value={scan.calibration_profile_id ?? 'none'} mono />
+            <KeyValue label="Started" value={formatDateTime(scan.started_at)} mono />
+            {scan.notes ? (
+              <>
+                <Divider className="my-1.5" />
+                <div className="text-[9.5px] leading-snug text-ink-dim">{scan.notes}</div>
+              </>
+            ) : null}
+          </FrameBody>
+        </Frame>
+
+        <Frame className="shrink-0">
+          <FrameHeader title="Coverage" subtitle="direct measurements only" />
+          <div className="p-2.5">
+            <div className="flex items-baseline justify-between">
+              <span className="tabular text-[16px] text-ink">{summary!.measuredCells}</span>
+              <span className="text-[9.5px] text-ink-dim">of {summary!.totalCells} cells</span>
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-canvas">
+              <div
+                className="h-full rounded-full bg-efield/80 transition-[width]"
+                style={{ width: `${Math.min(100, summary!.coveragePct)}%` }}
               />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft px-4 py-2.5">
-              <div className="flex min-w-[220px] flex-1 items-center gap-2">
-                <span className="tabular text-[9.5px] text-ink-dim">0</span>
-                <div className="h-2 flex-1 rounded-full" style={{ backgroundImage: rampGradientCss() }} />
-                <span className="tabular text-[9.5px] text-ink-dim">
-                  {formatNumber(summary && summary.max ? summary.max.signal_raw : settings.acquisition.adc_max)}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-dim">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-[2px] border border-line bg-canvas" /> unmeasured
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-[2px] border border-dashed border-elevated" /> unstable
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-[2px] border border-strong" /> saturated
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-[2px] bg-strong/20 text-[8px] leading-none text-strong">✕</span> invalid
-                </span>
-                {viewMode === 'interpolated' ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-[2px] bg-[repeating-linear-gradient(45deg,rgba(139,92,246,0.5),rgba(139,92,246,0.5)_1px,transparent_1px,transparent_3px)]" />{' '}
-                    interpolated (derived)
-                  </span>
-                ) : null}
-              </div>
+            <div className="mt-2 grid grid-cols-2 gap-x-2">
+              <KeyValue label="Valid" value={summary!.valid} mono />
+              <KeyValue label="Unstable" value={summary!.unstable} mono />
+              <KeyValue label="Saturated" value={summary!.saturated} mono />
+              <KeyValue label="Invalid" value={summary!.invalid} mono />
             </div>
-          </Panel>
+            <Divider className="my-1.5" />
+            <div className="flex items-center justify-between text-[9.5px] text-ink-dim">
+              <span>live frame</span>
+              <span className="flex items-center gap-1">
+                <StatusDot tone={deviceState === 'CONNECTED' ? 'ok' : 'neutral'} pulse={deviceState === 'CONNECTED'} />
+                <span className="tabular text-ink-muted">{latest ? formatNumber(latest.signal_raw) : '—'}</span>
+                <span>{relativeTime(latest?.received_at ?? null)}</span>
+              </span>
+            </div>
+          </div>
+        </Frame>
+      </div>
 
-          {viewMode === 'interpolated' ? (
-            <Notice tone="warn" title="Interpolated view is a visualisation aid" icon={<Layers size={13} />}>
-              Hatched cells are estimated from neighbouring measurements — they are not measurements and are excluded
-              from statistics and exports.
-            </Notice>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Panel>
-              <PanelHeader title="Hotspot ranking" subtitle="Valid readings, highest first" icon={<Trophy size={13} />} />
-              {ranked.length === 0 ? (
-                <div className="px-4 py-5 text-center text-[11px] text-ink-dim">No valid measurements to rank.</div>
-              ) : (
-                <ul className="divide-y divide-line-soft">
-                  {ranked.map((row, i) => (
-                    <li key={row.measurement.measurement_id} className="flex items-center gap-3 px-4 py-2">
-                      <span className="tabular w-4 text-[10px] text-ink-dim">{i + 1}</span>
-                      <span className="font-mono text-[11px] text-ink-muted">{row.label}</span>
-                      <span className="text-[10px] text-ink-dim">
-                        {row.measurement.x_mm}, {row.measurement.y_mm} mm
-                      </span>
-                      <span className="tabular ml-auto text-[12px] text-ink">
-                        {formatNumber(row.measurement.signal_raw)}
-                        <span className="ml-1 text-[9.5px] text-ink-dim">{row.measurement.unit}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Panel>
-
-            <Panel>
-              <PanelHeader title="Coverage" subtitle="Direct measurements only" icon={<ScanLine size={13} />} />
-              <div className="space-y-2.5 px-4 py-3">
-                <div>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-[11px] text-ink-dim">Measured cells</span>
-                    <span className="tabular text-[12px] text-ink">
-                      {summary!.measuredCells}
-                      <span className="text-ink-dim"> / {summary!.totalCells}</span>
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-canvas">
-                    <div
-                      className="h-full rounded-full bg-accent/80 transition-[width]"
-                      style={{ width: `${Math.min(100, summary!.coveragePct)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pt-1">
-                  <KeyValue label="Valid" value={summary!.valid} />
-                  <KeyValue label="Unstable" value={summary!.unstable} />
-                  <KeyValue label="Saturated" value={summary!.saturated} />
-                  <KeyValue label="Invalid" value={summary!.invalid} />
-                  <KeyValue label="Missing" value={summary!.missing} />
-                  <KeyValue label="Coverage" value={`${summary!.coveragePct.toFixed(0)}%`} />
-                </div>
-              </div>
-            </Panel>
+      {/* ---------------- centre: the mapping workspace ---------------- */}
+      <Frame className="min-h-[380px] xl:min-h-0">
+        <FrameHeader
+          title="Mapping workspace"
+          subtitle={
+            summary && summary.measuredCells > 0
+              ? `${summary.measuredCells} of ${summary.totalCells} measured · ${summary.coveragePct.toFixed(0)}% coverage`
+              : 'no cells measured yet — the grid is empty'
+          }
+          icon={<Grid3x3 size={12} />}
+          right={
+            <>
+              <Segmented
+                size="xs"
+                value={viewMode}
+                onChange={(v) => {
+                  setViewMode(v)
+                  updateSettings({ interpolation: v === 'interpolated' })
+                }}
+                options={[
+                  { value: 'measured', label: 'Measured' },
+                  { value: 'interpolated', label: 'Interpolated' },
+                ]}
+              />
+              <Badge tone="neutral">{scan.probe_type === 'E_FIELD' ? 'E' : 'H'}</Badge>
+            </>
+          }
+        />
+        <div className="min-h-0 flex-1 p-1.5">
+          <HeatmapCanvas
+            scan={scan}
+            measurements={scanMeasurements}
+            selected={selectedCell}
+            interpolate={viewMode === 'interpolated'}
+            onSelect={selectCell}
+            fill
+            onCanvasReady={onCanvasReady}
+          />
+        </div>
+        <div className="shrink-0 border-t border-line-soft px-2.5 py-1.5">
+          <div className="flex items-center gap-2">
+            <span className="tabular text-[9px] text-ink-dim">0</span>
+            <div className="h-1.5 flex-1 rounded-full" style={{ backgroundImage: rampGradientCss() }} />
+            <span className="tabular text-[9px] text-ink-dim">
+              {formatNumber(summary && summary.max ? summary.max.signal_raw : settings.acquisition.adc_max)}
+            </span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[9px] text-ink-dim">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-[1px] border border-line bg-canvas" /> unmeasured
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-[1px] border border-dashed border-elevated" /> unstable
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-[1px] border border-strong" /> saturated
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="text-[8px] leading-none text-strong">✕</span> invalid
+            </span>
+            {viewMode === 'interpolated' ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-[1px] bg-[repeating-linear-gradient(45deg,rgba(185,139,255,0.6),rgba(185,139,255,0.6)_1px,transparent_1px,transparent_3px)]" />
+                interpolated (derived)
+              </span>
+            ) : null}
           </div>
         </div>
+        {viewMode === 'interpolated' ? (
+          <div className="shrink-0 border-t border-line-soft px-2.5 py-1">
+            <span className="flex items-center gap-1 text-[9.5px] text-elevated">
+              <Layers size={10} /> Hatched cells are estimated from neighbours — not measurements, excluded from
+              statistics and exports.
+            </span>
+          </div>
+        ) : null}
+      </Frame>
 
-        {/* Right rail: coordinate + capture */}
-        <div className="space-y-4">
-          <Panel>
-            <PanelHeader
-              title="Selected cell"
-              subtitle={selected ? `${selected.label} · x ${selected.x_mm} mm, y ${selected.y_mm} mm` : 'Click a grid cell to select it'}
-              icon={<Crosshair size={13} />}
-              right={
-                selectedCell ? (
-                  <Button size="sm" variant="ghost" onClick={() => selectCell(null)}>
-                    Clear
-                  </Button>
-                ) : null
-              }
-            />
+      {/* ---------------- right: cell + ranking + actions ---------------- */}
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2.5 max-xl:grid-rows-none">
+        <Frame className="shrink-0">
+          <FrameHeader
+            title="Selected cell"
+            subtitle={selected ? `${selected.label} · x ${selected.x_mm} · y ${selected.y_mm} mm` : 'click a cell'}
+            icon={<Crosshair size={12} />}
+            right={
+              selectedCell ? (
+                <Button size="xs" variant="ghost" onClick={() => selectCell(null)}>
+                  clear
+                </Button>
+              ) : null
+            }
+          />
+          <div className="space-y-2 p-2.5">
             {!selected || !selectedCell ? (
-              <div className="px-4 py-6 text-center text-[11px] leading-relaxed text-ink-dim">
-                Select a cell in the grid, position the probe physically at that coordinate, then capture the live
-                reading.
-              </div>
+              <p className="text-[10px] leading-relaxed text-ink-dim">
+                Select a cell, position the probe physically at that coordinate, then capture the live reading.
+              </p>
             ) : (
-              <div className="space-y-3 px-3 py-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <CoordBox label="Cell" value={selected.label} />
-                  <CoordBox label={scan.origin === 'TOP_LEFT' ? 'Y from top' : 'Y from bottom'} value={`${selected.y_mm} mm`} />
-                  <CoordBox label="X" value={`${selected.x_mm} mm`} />
-                  <CoordBox label="Probe" value={probeLabel(scan.probe_type)} tone={scan.probe_type === 'E_FIELD' ? 'efield' : 'hfield'} />
+              <>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <CoordBox label="cell" value={selected.label} />
+                  <CoordBox label={scan.origin === 'TOP_LEFT' ? 'y from top' : 'y from bottom'} value={`${selected.y_mm}`} />
+                  <CoordBox label="x" value={`${selected.x_mm}`} />
+                  <CoordBox
+                    label="probe"
+                    value={probeLabel(scan.probe_type)}
+                    tone={scan.probe_type === 'E_FIELD' ? 'efield' : 'hfield'}
+                  />
                 </div>
 
                 {selectedMeasurement ? (
-                  <div className="rounded-lg border border-line bg-canvas px-2.5 py-2">
+                  <div className="rounded-[6px] border border-line bg-canvas px-2 py-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="label-caps">Stored reading</span>
+                      <span className="label-caps">stored</span>
                       <Badge tone={qualityTone(selectedMeasurement.quality_status)}>
                         {selectedMeasurement.quality_status}
                       </Badge>
                     </div>
-                    <div className="mt-1 flex items-baseline gap-1.5">
-                      <span className="tabular text-[20px] text-ink">{formatNumber(selectedMeasurement.signal_raw)}</span>
-                      <span className="text-[10px] text-ink-dim">{selectedMeasurement.unit}</span>
-                      {selectedMeasurement.signal_processed !== null ? (
-                        <span className="ml-auto text-[10px] text-ink-dim">
-                          filtered {formatNumber(selectedMeasurement.signal_processed)}
-                        </span>
-                      ) : null}
+                    <div className="mt-1 flex items-baseline gap-1">
+                      <span className="tabular text-[17px] text-ink">{formatNumber(selectedMeasurement.signal_raw)}</span>
+                      <span className="text-[9px] text-ink-dim">{selectedMeasurement.unit}</span>
                     </div>
-                    <div className="mt-1.5 space-y-0.5 text-[10px] text-ink-dim">
+                    <div className="mt-1 space-y-0.5 text-[9px] text-ink-dim">
                       <div className="flex justify-between">
-                        <span>{selectedMeasurement.measurement_id}</span>
+                        <span className="font-mono">{selectedMeasurement.measurement_id}</span>
                         <span>{formatTime(selectedMeasurement.timestamp)}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="truncate">{selectedMeasurement.probe_id}</span>
-                        <span>{selectedMeasurement.calibration_profile_id ?? 'no profile'}</span>
-                      </div>
+                      {selectedMeasurement.signal_processed !== null ? (
+                        <div className="flex justify-between">
+                          <span>filtered</span>
+                          <span className="tabular">{formatNumber(selectedMeasurement.signal_processed, 1)}</span>
+                        </div>
+                      ) : null}
                     </div>
                     <button
                       type="button"
                       onClick={() => void markInvalid(selectedMeasurement.measurement_id)}
-                      className="mt-2 inline-flex items-center gap-1 text-[10px] text-strong/80 hover:text-strong"
                       disabled={selectedMeasurement.quality_status === 'INVALID'}
+                      className="mt-1 inline-flex items-center gap-1 text-[9px] text-strong/80 hover:text-strong disabled:opacity-40"
                     >
-                      <Ban size={10} /> Mark invalid
+                      <Ban size={9} /> mark invalid
                     </button>
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-line px-2.5 py-2 text-[10.5px] text-ink-dim">
+                  <div className="rounded-[6px] border border-dashed border-line px-2 py-1.5 text-[9.5px] text-ink-dim">
                     No measurement stored at this coordinate.
                   </div>
                 )}
 
                 <Button
                   variant="primary"
+                  size="md"
                   block
-                  icon={<Crosshair size={13} />}
-                  disabled={!canCapture || capturing}
+                  icon={<Crosshair size={12} />}
+                  disabled={!canCapture}
                   onClick={() => void capture()}
                 >
-                  {selectedMeasurement ? 'Re-measure this cell' : 'Capture measurement'}
+                  {selectedMeasurement ? 'Re-measure cell' : 'Capture measurement'}
                 </Button>
                 {!canCapture ? (
-                  <p className="flex items-start gap-1.5 text-[10.5px] leading-relaxed text-ink-dim">
-                    <CircleAlert size={11} className="mt-0.5 shrink-0" />
+                  <p className="flex items-start gap-1 text-[9px] leading-snug text-ink-dim">
+                    <CircleAlert size={9} className="mt-[2px] shrink-0" />
                     {deviceState !== 'CONNECTED'
-                      ? 'No live link — connect the detector to capture.'
+                      ? 'No live link — connect the detector.'
                       : signalState === 'STALE'
                         ? 'Last frame is stale — wait for fresh data.'
                         : 'Latest frame is invalid — not capturable.'}
                   </p>
                 ) : (
-                  <div className="flex items-center justify-between text-[10.5px] text-ink-dim">
-                    <span>Live value</span>
+                  <div className="flex items-center justify-between text-[9.5px] text-ink-dim">
+                    <span>live value</span>
                     <span className="tabular text-ink">
                       {formatNumber(latest!.signal_raw)} {settings.acquisition.unit}
                     </span>
                   </div>
                 )}
-                {selectedMeasurement ? (
-                  <p className="text-[10px] leading-relaxed text-ink-dim">
-                    Re-measuring supersedes the stored reading: it is kept in the log, marked invalid and linked to its
-                    replacement.
-                  </p>
-                ) : null}
-              </div>
+              </>
             )}
-          </Panel>
+          </div>
+        </Frame>
 
-          <Panel>
-            <PanelHeader title="Scan details" subtitle={`Started ${formatDateTime(scan.started_at)}`} icon={<Ruler size={13} />} />
-            <div className="px-4 py-2.5">
-              <KeyValue label="Scan ID" value={<span className="font-mono text-[10.5px]">{scan.scan_id}</span>} />
-              <KeyValue label="Probe" value={<span className="font-mono text-[10.5px]">{scan.probe_id}</span>} />
-              <KeyValue
-                label="Profile"
-                value={<span className="font-mono text-[10.5px]">{scan.calibration_profile_id ?? 'none'}</span>}
-              />
-              <KeyValue label="Cell size" value={`${geometry!.cellWidth.toFixed(1)} × ${geometry!.cellHeight.toFixed(1)} mm`} />
-              <KeyValue
-                label="Max measured"
-                value={
-                  summary!.max
-                    ? `${formatNumber(summary!.max.signal_raw)} @ ${summary!.max.x_mm}, ${summary!.max.y_mm} mm`
-                    : '—'
+        <Frame className="min-h-0">
+          <FrameHeader title="Hotspots" subtitle="valid readings, highest first" icon={<Trophy size={12} />} />
+          <FrameBody noPad>
+            {ranked.length === 0 ? (
+              <div className="px-3 py-6 text-center text-[10px] text-ink-dim">No valid measurements to rank.</div>
+            ) : (
+              <ul className="divide-y divide-line-soft">
+                {ranked.map((row, i) => (
+                  <li key={row.measurement.measurement_id} className="flex items-center gap-2 px-2.5 py-[5px]">
+                    <span className="tabular w-3 text-[9px] text-ink-dim">{i + 1}</span>
+                    <span className="font-mono text-[10px] text-ink-muted">{row.label}</span>
+                    <span className="truncate text-[9px] text-ink-dim">
+                      {row.measurement.x_mm}, {row.measurement.y_mm}
+                    </span>
+                    <span className="tabular ml-auto text-[10.5px] text-ink">{formatNumber(row.measurement.signal_raw)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </FrameBody>
+        </Frame>
+
+        <Frame className="shrink-0">
+          <div className="p-2.5">
+            <Switch
+              checked={viewMode === 'interpolated'}
+              onChange={(next) => {
+                setViewMode(next ? 'interpolated' : 'measured')
+                updateSettings({ interpolation: next })
+              }}
+              label="Interpolation overlay"
+              description="Visual aid only; never counted as measurement."
+            />
+            <Divider className="my-1.5" />
+            <div className="grid grid-cols-2 gap-1.5">
+              <Button size="sm" icon={<Download size={10} />} onClick={exportCsv} disabled={scanMeasurements.length === 0}>
+                CSV
+              </Button>
+              <Button size="sm" icon={<ImageDown size={10} />} onClick={exportPng} disabled={!canvasEl}>
+                PNG
+              </Button>
+            </div>
+            <Button
+              size="sm"
+              variant="danger"
+              block
+              icon={<Eraser size={10} />}
+              className="mt-1.5"
+              disabled={scanMeasurements.length === 0}
+              onClick={() => {
+                if (window.confirm(`Delete all ${scanMeasurements.length} measurements in ${scan.scan_name}?`)) {
+                  void clearScanMeasurements(scan.scan_id)
+                  notify('warn', 'Scan measurements cleared', 'The scan definition is unchanged.')
                 }
-              />
-              <KeyValue label="Mean (valid)" value={summary!.mean !== null ? formatNumber(summary!.mean, 1) : '—'} />
-              {scan.notes ? (
-                <div className="mt-1.5 border-t border-line-soft pt-1.5 text-[10.5px] leading-relaxed text-ink-dim">
-                  {scan.notes}
-                </div>
-              ) : null}
-            </div>
-            <div className="border-t border-line-soft px-3 py-2.5">
-              <div className="flex items-center justify-between pb-2">
-                <span className="text-[11px] text-ink-muted">Show interpolated surface</span>
-                <StatusDot tone={viewMode === 'interpolated' ? 'accent' : 'neutral'} />
-              </div>
-              <Switch
-                checked={viewMode === 'interpolated'}
-                onChange={(next) => {
-                  setViewMode(next ? 'interpolated' : 'measured')
-                  updateSettings({ interpolation: next })
-                }}
-                label="Interpolation overlay"
-                description="Visual aid only; never counted as measurement."
-              />
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <Button size="sm" icon={<Download size={12} />} onClick={exportCsv}>
-                  Export CSV
-                </Button>
-                <Button size="sm" icon={<ImageDown size={12} />} onClick={exportPng} disabled={!canvasEl}>
-                  Export PNG
-                </Button>
-                <Button
-                  size="sm"
-                  variant="danger"
-                  icon={<Eraser size={12} />}
-                  className="col-span-2"
-                  disabled={scanMeasurements.length === 0}
-                  onClick={() => {
-                    if (window.confirm(`Delete all ${scanMeasurements.length} measurements in ${scan.scan_name}?`)) {
-                      void clearScanMeasurements(scan.scan_id)
-                      notify('warn', 'Scan measurements cleared', 'The scan definition is unchanged.')
-                    }
-                  }}
-                >
-                  Clear cells
-                </Button>
-              </div>
-            </div>
-          </Panel>
-
-          <Panel className="border-dashed px-3 py-2.5">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="text-[11px] text-ink-muted">Live frame</div>
-                <div className="mt-0.5 text-[10px] text-ink-dim">{relativeTime(latest?.received_at ?? null)}</div>
-              </div>
-              <div className="text-right">
-                <div className="tabular text-[13px] text-ink">
-                  {latest ? formatNumber(latest.signal_raw) : '—'}
-                  <span className="ml-1 text-[9.5px] text-ink-dim">{settings.acquisition.unit}</span>
-                </div>
-                <Badge tone={deviceState === 'CONNECTED' ? (signalState === 'STABLE' ? 'ok' : signalState === 'UNKNOWN' ? 'neutral' : 'warn') : 'neutral'}>
-                  {deviceState === 'CONNECTED' ? signalState : 'NO LINK'}
-                </Badge>
-              </div>
-            </div>
-          </Panel>
-        </div>
+              }}
+            >
+              Clear cells
+            </Button>
+          </div>
+          <FrameFooter>
+            <span className="truncate text-[9px] text-ink-dim">re-measure keeps history · marked invalid</span>
+          </FrameFooter>
+        </Frame>
       </div>
 
       <ScanSetupDialog open={setupOpen} onClose={() => setSetupOpen(false)} />
@@ -575,11 +551,11 @@ export function HeatmapPage() {
 
 function CoordBox({ label, value, tone }: { label: string; value: string; tone?: 'efield' | 'hfield' }) {
   return (
-    <div className="rounded-lg border border-line bg-canvas px-2.5 py-1.5">
-      <div className="label-caps !text-[9px]">{label}</div>
+    <div className="rounded-[5px] border border-line bg-canvas px-1.5 py-1">
+      <div className="text-[8.5px] tracking-[0.1em] text-ink-dim uppercase">{label}</div>
       <div
         className={cn(
-          'mt-0.5 font-mono text-[12.5px]',
+          'mt-0.5 font-mono text-[11.5px]',
           tone === 'efield' ? 'text-efield' : tone === 'hfield' ? 'text-hfield' : 'text-ink',
         )}
       >

@@ -6,11 +6,13 @@ import {
   Button,
   Divider,
   Field,
+  Frame,
+  FrameBody,
+  FrameFooter,
+  FrameHeader,
   KeyValue,
   Notice,
   NumberInput,
-  Panel,
-  PanelHeader,
   TextInput,
   cn,
 } from '../components/ui'
@@ -20,15 +22,11 @@ import type { CalibrationProfile, Probe, ProbeType } from '../lib/types'
 export function Calibration() {
   const { probes, profiles, settings, samples, stats, saveProbe, saveProfile, notify, deviceProbe } = useApp()
   const [probeType, setProbeType] = useState<ProbeType>(deviceProbe ?? 'E_FIELD')
-
-  const probe = probes.find((p) => p.probe_type === probeType)
-  const profile = useMemo(
-    () => profiles.find((p) => p.probe_id === probe?.probe_id) ?? null,
-    [profiles, probe],
-  )
-
   const [probeDraft, setProbeDraft] = useState<Probe | null>(null)
   const [profileDraft, setProfileDraft] = useState<CalibrationProfile | null>(null)
+
+  const probe = probes.find((p) => p.probe_type === probeType)
+  const profile = useMemo(() => profiles.find((p) => p.probe_id === probe?.probe_id) ?? null, [profiles, probe])
 
   const activeProbe = probeDraft && probeDraft.probe_type === probeType ? probeDraft : probe
   const activeProfile = profileDraft && profileDraft.probe_type === probeType ? profileDraft : profile
@@ -44,6 +42,8 @@ export function Calibration() {
     .filter((p) => p.probe_id === activeProbe?.probe_id)
     .sort((a, b) => new Date(b.calibration_date).getTime() - new Date(a.calibration_date).getTime())
 
+  const Icon = probeType === 'E_FIELD' ? Zap : Waves
+
   const saveProbeDraft = async () => {
     if (!activeProbe) return
     if (!activeProbe.label.trim()) {
@@ -58,13 +58,13 @@ export function Calibration() {
   const saveProfileDraft = async () => {
     if (!activeProfile || !activeProbe) return
     if (!activeProfile.label.trim()) {
-      notify('error', 'Profile needs a label', 'Name the baseline profile so it can be referenced by scans.')
+      notify('error', 'Profile needs a label', 'Name the baseline profile so scans can reference it.')
       return
     }
     await saveProfile({ ...activeProfile, probe_id: activeProbe.probe_id, probe_type: probeType })
     await saveProbe({ ...activeProbe, profile_id: activeProfile.profile_id })
     setProfileDraft(null)
-    notify('ok', 'Calibration profile saved', `${activeProfile.label} is now the active profile for ${probeLabel(probeType)}.`)
+    notify('ok', 'Calibration profile saved', `${activeProfile.label} is now active for ${probeLabel(probeType)}.`)
   }
 
   const newProfile = () => {
@@ -82,281 +82,241 @@ export function Calibration() {
     })
   }
 
-  const icon = probeType === 'E_FIELD' ? Zap : Waves
-  const Icon = icon
-
   return (
-    <div className="space-y-4">
-      <Panel className="px-3 py-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-lg border border-line bg-canvas p-0.5">
-            {(['E_FIELD', 'H_FIELD'] as ProbeType[]).map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => {
-                  setProbeType(type)
-                  setProbeDraft(null)
-                  setProfileDraft(null)
-                }}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-[6px] px-2.5 py-1 text-[11.5px] font-medium transition-colors',
-                  probeType === type
-                    ? type === 'E_FIELD'
-                      ? 'bg-efield/12 text-efield shadow-[inset_0_0_0_1px_rgba(56,189,248,0.35)]'
-                      : 'bg-hfield/12 text-hfield shadow-[inset_0_0_0_1px_rgba(192,132,252,0.35)]'
-                    : 'text-ink-dim hover:text-ink-muted',
-                )}
-              >
-                {type === 'E_FIELD' ? <Zap size={12} /> : <Waves size={12} />}
-                {probeLabel(type)}
-              </button>
-            ))}
+    <div className="grid h-full min-h-0 grid-cols-1 gap-2.5 max-xl:h-auto xl:grid-cols-[236px_minmax(0,1fr)_minmax(0,1fr)]">
+      {/* left rail: probe switch + live check + caveat */}
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2.5 max-xl:grid-rows-none">
+        <Frame className="shrink-0">
+          <FrameHeader title="Probe" subtitle="identity recorded per reading" icon={<Icon size={12} />} />
+          <div className="space-y-1.5 p-2.5">
+            <div className="grid grid-cols-2 gap-1">
+              {(['E_FIELD', 'H_FIELD'] as ProbeType[]).map((type) => {
+                const active = probeType === type
+                const TypeIcon = type === 'E_FIELD' ? Zap : Waves
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setProbeType(type)
+                      setProbeDraft(null)
+                      setProfileDraft(null)
+                    }}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-[6px] border px-2 py-1.5 text-[10.5px] font-medium transition-colors',
+                      active
+                        ? type === 'E_FIELD'
+                          ? 'border-efield/40 bg-efield/8 text-efield'
+                          : 'border-hfield/40 bg-hfield/8 text-hfield'
+                        : 'border-line bg-canvas text-ink-dim hover:text-ink-muted',
+                    )}
+                  >
+                    <TypeIcon size={11} />
+                    {probeLabel(type)}
+                  </button>
+                )
+              })}
+            </div>
+            <KeyValue label="Device reports" value={deviceProbe ? probeLabel(deviceProbe) : '—'} />
+            <KeyValue label="Active profile" value={activeProfile?.profile_id ?? 'none'} mono />
           </div>
-          {deviceProbe ? (
-            <span className="text-[10.5px] text-ink-dim">
-              Device reports <span className="text-ink-muted">{probeLabel(deviceProbe)}</span>
-            </span>
-          ) : null}
-          <div className="ml-auto flex items-center gap-2">
-            <Button size="sm" variant="ghost" icon={<Plus size={12} />} onClick={newProfile} disabled={!activeProbe}>
-              New baseline profile
-            </Button>
-          </div>
-        </div>
-      </Panel>
+        </Frame>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel>
-          <PanelHeader
-            title="Probe profile"
-            subtitle="Physical identity of the probe in use"
-            icon={<Icon size={13} />}
-            right={<Badge tone={probeType === 'E_FIELD' ? 'efield' : 'hfield'}>{probeLabel(probeType)}</Badge>}
-          />
+        <Frame className="min-h-0">
+          <FrameHeader title="Live check" subtitle="10 s window" />
+          <FrameBody className="p-2.5">
+            <KeyValue
+              label="Current mean"
+              value={live.window.mean !== null ? `${formatNumber(live.window.mean, 1)} ${settings.acquisition.unit}` : 'no frames'}
+              mono
+            />
+            <KeyValue
+              label="Above baseline"
+              value={
+                live.window.mean !== null && activeProfile
+                  ? `${formatNumber(live.window.mean - activeProfile.baseline_value, 1)}`
+                  : '—'
+              }
+              mono
+            />
+            <KeyValue label="Frames used" value={live.window.count} mono />
+            <KeyValue
+              label="Instability"
+              value={live.window.spreadPct !== null ? `${formatNumber(live.window.spreadPct, 1)}% pk-pk` : '—'}
+              mono
+            />
+            <Divider className="my-1.5" />
+            <p className="text-[9.5px] leading-snug text-ink-dim">
+              Holding the probe in open space away from the DUT gives the noise-floor reference. Record it as the
+              baseline so relative readings have context.
+            </p>
+            <div className="mt-2 space-y-1.5">
+              <Notice tone="warn" title="Baseline ≠ calibration" icon={<CircleAlert size={11} />}>
+                Claiming V/m or A/m needs a reference instrument, defined geometry and a documented procedure.
+              </Notice>
+              <Notice tone="neutral" title="Verify probe selectivity" icon={<Info size={11} />}>
+                Monopole and loop favour E and H coupling, but both respond to both fields.
+              </Notice>
+            </div>
+          </FrameBody>
+        </Frame>
+      </div>
+
+      {/* probe profile */}
+      <Frame className="min-h-[360px] xl:min-h-0">
+        <FrameHeader
+          title="Probe profile"
+          subtitle="physical identity"
+          icon={<Icon size={12} />}
+          right={<Badge tone={probeType === 'E_FIELD' ? 'efield' : 'hfield'}>{probeLabel(probeType)}</Badge>}
+        />
+        <FrameBody className="space-y-2 p-2.5">
           {!activeProbe ? (
-            <div className="px-4 py-6 text-center text-[11px] text-ink-dim">No probe registered for this field type.</div>
+            <div className="py-6 text-center text-[10.5px] text-ink-dim">No probe registered for this field type.</div>
           ) : (
-            <div className="space-y-2.5 px-4 py-3">
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Probe ID">
-                  <TextInput
-                    value={activeProbe.probe_id}
-                    onChange={(e) => setProbeDraft({ ...activeProbe, probe_id: e.target.value })}
-                    className="font-mono text-[11.5px]"
-                  />
-                </Field>
-                <Field label="Label">
-                  <TextInput
-                    value={activeProbe.label}
-                    onChange={(e) => setProbeDraft({ ...activeProbe, label: e.target.value })}
-                  />
-                </Field>
-              </div>
+            <>
+              <Field label="Probe ID">
+                <TextInput
+                  value={activeProbe.probe_id}
+                  onChange={(e) => setProbeDraft({ ...activeProbe, probe_id: e.target.value })}
+                  className="font-mono text-[10.5px]"
+                />
+              </Field>
+              <Field label="Label">
+                <TextInput value={activeProbe.label} onChange={(e) => setProbeDraft({ ...activeProbe, label: e.target.value })} />
+              </Field>
               <Field label="Connector">
                 <TextInput
                   value={activeProbe.connector_type}
                   onChange={(e) => setProbeDraft({ ...activeProbe, connector_type: e.target.value })}
                 />
               </Field>
-              <Field label="Physical dimensions" hint="Used for documentation only — not a calibration input.">
+              <Field label="Physical dimensions" hint="Documentation only — not a calibration input.">
                 <TextInput
                   value={activeProbe.physical_dimensions}
                   onChange={(e) => setProbeDraft({ ...activeProbe, physical_dimensions: e.target.value })}
                 />
               </Field>
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[10.5px] text-ink-dim">
-                  Registered {formatDateTime(activeProbe.created_at)}
-                </span>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  icon={<Save size={12} />}
-                  disabled={!probeDraft}
-                  onClick={() => void saveProbeDraft()}
-                >
-                  Save probe
-                </Button>
-              </div>
-            </div>
+              <div className="pt-1 text-[9px] text-ink-dim">registered {formatDateTime(activeProbe.created_at)}</div>
+            </>
           )}
-        </Panel>
+        </FrameBody>
+        <FrameFooter className="justify-between">
+          <span className="text-[9px] text-ink-dim">{probeDraft ? 'unsaved changes' : 'saved'}</span>
+          <Button size="sm" variant="primary" icon={<Save size={10} />} disabled={!probeDraft} onClick={() => void saveProbeDraft()}>
+            Save probe
+          </Button>
+        </FrameFooter>
+      </Frame>
 
-        <Panel>
-          <PanelHeader
+      {/* baseline + history */}
+      <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2.5 max-xl:grid-rows-none">
+        <Frame className="shrink-0">
+          <FrameHeader
             title="Baseline & gain"
-            subtitle="Baseline correction is not absolute calibration"
-            icon={<FlaskConical size={13} />}
-            right={activeProfile ? <Badge tone="accent">ACTIVE</Badge> : <Badge tone="warn">NONE</Badge>}
+            subtitle="correction, not calibration"
+            icon={<FlaskConical size={12} />}
+            right={
+              <>
+                <Badge tone={activeProfile ? 'accent' : 'warn'}>{activeProfile ? 'ACTIVE' : 'NONE'}</Badge>
+                <Button size="xs" variant="ghost" icon={<Plus size={9} />} onClick={newProfile} disabled={!activeProbe}>
+                  new
+                </Button>
+              </>
+            }
           />
           {!activeProfile ? (
-            <div className="px-4 py-6 text-center text-[11px] leading-relaxed text-ink-dim">
+            <div className="px-2.5 py-5 text-center text-[10px] leading-relaxed text-ink-dim">
               No baseline profile for this probe. Create one to record a noise-floor value and reference method with
               every measurement.
             </div>
           ) : (
-            <div className="space-y-2.5 px-4 py-3">
-              <div className="grid grid-cols-2 gap-2">
+            <>
+              <div className="space-y-2 p-2.5">
                 <Field label="Profile label">
+                  <TextInput value={activeProfile.label} onChange={(e) => setProfileDraft({ ...activeProfile, label: e.target.value })} />
+                </Field>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Field
+                    label={`Baseline · ${settings.acquisition.unit}`}
+                    hint={suggestion !== null ? `live mean ${formatNumber(suggestion, 1)}` : 'no live frames'}
+                  >
+                    <NumberInput
+                      value={activeProfile.baseline_value}
+                      onChange={(e) => setProfileDraft({ ...activeProfile, baseline_value: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label="Gain" hint="if supported by hardware">
+                    <NumberInput
+                      step="0.1"
+                      value={activeProfile.gain_setting}
+                      onChange={(e) => setProfileDraft({ ...activeProfile, gain_setting: Number(e.target.value) })}
+                    />
+                  </Field>
+                </div>
+                <Field label="Reference method">
                   <TextInput
-                    value={activeProfile.label}
-                    onChange={(e) => setProfileDraft({ ...activeProfile, label: e.target.value })}
+                    value={activeProfile.reference_method}
+                    onChange={(e) => setProfileDraft({ ...activeProfile, reference_method: e.target.value })}
                   />
                 </Field>
-                <Field label="Profile ID">
-                  <div className="flex h-9 items-center rounded-lg border border-line bg-canvas px-2.5 font-mono text-[11px] text-ink-dim">
-                    {activeProfile.profile_id}
-                  </div>
-                </Field>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Field
-                  label={`Baseline (${settings.acquisition.unit})`}
-                  hint={suggestion !== null ? `Live mean now: ${formatNumber(suggestion, 1)}` : 'No live frames to average'}
-                >
-                  <NumberInput
-                    value={activeProfile.baseline_value}
-                    onChange={(e) => setProfileDraft({ ...activeProfile, baseline_value: Number(e.target.value) })}
-                  />
-                </Field>
-                <Field label="Gain setting" hint="Detector gain, if the hardware supports it.">
-                  <NumberInput
-                    step="0.1"
-                    value={activeProfile.gain_setting}
-                    onChange={(e) => setProfileDraft({ ...activeProfile, gain_setting: Number(e.target.value) })}
+                <Field label="Operator notes">
+                  <TextInput
+                    value={activeProfile.notes}
+                    onChange={(e) => setProfileDraft({ ...activeProfile, notes: e.target.value })}
+                    placeholder="Conditions, reference source, initials…"
                   />
                 </Field>
               </div>
-              <Field label="Reference method">
-                <TextInput
-                  value={activeProfile.reference_method}
-                  onChange={(e) => setProfileDraft({ ...activeProfile, reference_method: e.target.value })}
-                />
-              </Field>
-              <Field label="Operator notes">
-                <TextInput
-                  value={activeProfile.notes}
-                  onChange={(e) => setProfileDraft({ ...activeProfile, notes: e.target.value })}
-                  placeholder="Conditions, reference source, operator initials…"
-                />
-              </Field>
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[10.5px] text-ink-dim">
-                  {activeProfile.label === profile?.label
-                    ? `Recorded ${formatDateTime(activeProfile.calibration_date)}`
-                    : 'Unsaved changes'}
-                </span>
-                <div className="flex gap-2">
-                  {suggestion !== null ? (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() =>
-                        setProfileDraft({ ...activeProfile, baseline_value: Math.round(suggestion) })
-                      }
-                    >
-                      Use live baseline
-                    </Button>
-                  ) : null}
+              <FrameFooter className="justify-between">
+                {suggestion !== null ? (
                   <Button
                     size="sm"
-                    variant="primary"
-                    icon={<Save size={12} />}
-                    disabled={!profileDraft}
-                    onClick={() => void saveProfileDraft()}
+                    onClick={() => setProfileDraft({ ...activeProfile, baseline_value: Math.round(suggestion) })}
+                    title="Copy the current live mean into the baseline"
                   >
-                    Save profile
+                    Use live
                   </Button>
-                </div>
-              </div>
-            </div>
+                ) : (
+                  <span />
+                )}
+                <Button size="sm" variant="primary" icon={<Save size={10} />} disabled={!profileDraft} onClick={() => void saveProfileDraft()}>
+                  Save profile
+                </Button>
+              </FrameFooter>
+            </>
           )}
-        </Panel>
-      </div>
+        </Frame>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <Panel>
-          <PanelHeader title="Calibration history" subtitle={`${probeLabel(probeType)} probe profiles`} icon={<Ruler size={13} />} />
-          {history.length === 0 ? (
-            <div className="px-4 py-6 text-center text-[11px] text-ink-dim">No profiles recorded for this probe yet.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] text-[11.5px]">
-                <thead>
-                  <tr className="border-b border-line-soft">
-                    {['Profile', 'Baseline', 'Gain', 'Method', 'Date'].map((h) => (
-                      <th key={h} className="label-caps px-3 py-2 text-left !text-[9px]">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((h) => (
-                    <tr
-                      key={h.profile_id}
-                      className={cn(
-                        'border-b border-line-soft/60 transition-colors hover:bg-panel-raised/50',
-                        h.profile_id === activeProfile?.profile_id && 'bg-panel-raised/40',
-                      )}
-                    >
-                      <td className="px-3 py-2">
-                        <div className="text-ink">{h.label}</div>
-                        <div className="font-mono text-[9.5px] text-ink-dim">{h.profile_id}</div>
-                      </td>
-                      <td className="tabular px-3 py-2 text-ink-muted">
-                        {formatNumber(h.baseline_value)} <span className="text-[9.5px] text-ink-dim">{settings.acquisition.unit}</span>
-                      </td>
-                      <td className="tabular px-3 py-2 text-ink-muted">{h.gain_setting}</td>
-                      <td className="max-w-[160px] truncate px-3 py-2 text-[10.5px] text-ink-dim">{h.reference_method}</td>
-                      <td className="tabular px-3 py-2 text-[10.5px] text-ink-dim">{formatDateTime(h.calibration_date)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
-
-        <div className="space-y-4">
-          <Panel className="px-3 py-3">
-            <div className="label-caps mb-1.5">Live check</div>
-            <div className="space-y-0.5">
-              <KeyValue
-                label="Current mean (10 s)"
-                value={live.window.mean !== null ? `${formatNumber(live.window.mean, 1)} ${settings.acquisition.unit}` : 'no frames'}
-                mono
-              />
-              <KeyValue
-                label="Relative to baseline"
-                value={
-                  live.window.mean !== null && activeProfile
-                    ? `${formatNumber(live.window.mean - activeProfile.baseline_value, 1)} ${settings.acquisition.unit}`
-                    : '—'
-                }
-                mono
-              />
-              <KeyValue label="Frames used" value={live.window.count} mono />
-              <KeyValue label="Instability" value={live.window.spreadPct !== null ? `${formatNumber(live.window.spreadPct, 1)}% pk-pk` : '—'} mono />
-            </div>
-            <Divider className="my-2" />
-            <p className="text-[10px] leading-relaxed text-ink-dim">
-              Holding the probe in open space away from the DUT gives the noise-floor reference. Record that value as
-              the baseline so relative readings have context.
-            </p>
-          </Panel>
-
-          <Notice tone="warn" title="Baseline ≠ absolute calibration" icon={<CircleAlert size={13} />}>
-            Baseline and gain adjustments shift relative readings. Claiming field strength in V/m or A/m requires a
-            reference instrument, defined geometry, characterised frequency response and a documented procedure.
-          </Notice>
-
-          <Notice tone="neutral" title="Probe selectivity must be verified" icon={<Info size={13} />}>
-            The monopole and loop geometries favour E and H coupling respectively, but both respond to both fields. Do
-            not treat probe type as proof of field type.
-          </Notice>
-        </div>
+        <Frame className="min-h-0">
+          <FrameHeader title="Calibration history" subtitle={`${probeLabel(probeType)} profiles`} icon={<Ruler size={12} />} />
+          <FrameBody noPad>
+            {history.length === 0 ? (
+              <div className="px-3 py-6 text-center text-[10px] text-ink-dim">No profiles recorded for this probe yet.</div>
+            ) : (
+              <ul className="divide-y divide-line-soft">
+                {history.map((h) => (
+                  <li
+                    key={h.profile_id}
+                    className={cn('px-2.5 py-1.5', h.profile_id === activeProfile?.profile_id && 'bg-panel-raised/50')}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[10.5px] text-ink">{h.label}</span>
+                      <span className="tabular shrink-0 text-[9.5px] text-ink-dim">
+                        {formatNumber(h.baseline_value)} · g{h.gain_setting}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[9px] text-ink-dim">
+                      <span className="truncate font-mono">{h.profile_id}</span>
+                      <span className="shrink-0">{formatDateTime(h.calibration_date)}</span>
+                    </div>
+                    <div className="truncate text-[9px] text-ink-dim">{h.reference_method}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </FrameBody>
+        </Frame>
       </div>
     </div>
   )

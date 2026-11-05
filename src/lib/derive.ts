@@ -141,12 +141,12 @@ export function columnLabel(index: number): string {
 
 /** Colour ramp shared by heatmap, legend and report (PRD §7.2 rendering). */
 const RAMP: [number, [number, number, number]][] = [
-  [0, [17, 26, 40]],
-  [0.28, [56, 128, 189]],
-  [0.5, [56, 189, 248]],
-  [0.7, [168, 85, 247]],
-  [0.85, [249, 115, 22]],
-  [1, [239, 68, 68]],
+  [0, [22, 24, 28]],
+  [0.22, [42, 76, 96]],
+  [0.42, [76, 194, 255]],
+  [0.62, [185, 139, 255]],
+  [0.82, [240, 160, 60]],
+  [1, [242, 85, 90]],
 ]
 
 export function rampColor(t: number, alpha = 1): string {
@@ -175,7 +175,7 @@ export function normalise(value: number, min: number, max: number): number {
 }
 
 export function probeColor(type: ProbeType): string {
-  return type === 'E_FIELD' ? '#38bdf8' : '#c084fc'
+  return type === 'E_FIELD' ? '#4cc2ff' : '#b98bff'
 }
 
 export function probeLabel(type: ProbeType): string {
