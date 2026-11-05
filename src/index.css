@@ -1,0 +1,131 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', monospace;
+
+  /* PRD §5.2 colour tokens */
+  --color-canvas: #090b12;
+  --color-surface: #111522;
+  --color-panel: #171c2a;
+  --color-panel-raised: #1c2231;
+  --color-line: #292f40;
+  --color-line-soft: #20263a;
+
+  --color-accent: #8b5cf6;
+  --color-efield: #38bdf8;
+  --color-hfield: #c084fc;
+  --color-elevated: #f97316;
+  --color-strong: #ef4444;
+  --color-normal: #22c55e;
+
+  --color-ink: #e7eaf3;
+  --color-ink-muted: #98a0b3;
+  --color-ink-dim: #6b7285;
+
+  --radius-card: 12px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv05' 1, 'ss03' 1, 'tnum' 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 32%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+    outline-offset: 2px;
+  }
+
+  input,
+  select,
+  button,
+  textarea {
+    font: inherit;
+  }
+
+  /* Thin, quiet scrollbars — instrumentation feel */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2b3244 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #2b3244;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* Numeric readouts keep a fixed advance width so values do not jitter. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+  }
+
+  .panel {
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+
+  .label-caps {
+    font-size: 10px;
+    line-height: 1.2;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-ink-dim);
+    font-weight: 500;
+  }
+
+  .grid-mesh {
+    background-image:
+      linear-gradient(to right, rgba(41, 47, 64, 0.6) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(41, 47, 64, 0.6) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-soft {
+    animation: none;
+  }
+}
