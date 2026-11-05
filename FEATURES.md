@@ -18,12 +18,20 @@ available only through the explicit **Demo Mode** documented at the end of this 
 | 10 | Hardware Settings and connection status | `src/pages/Settings.tsx` + header rail | Port, baud, transport availability, acquisition rules, raw link log, persistent status |
 | 11 | E/H comparison | `SignalAnalysis` → "Scan comparison" | Grouped bars, separate axes per probe type — never a shared scale |
 | 12 | (implicit) Connection prompt / no fabricated readings | Header rail, `ConnectDialog`, empty states | With no device every value field stays blank and labelled |
+| 13 | Machine view: live camera + 3D reconstruction | `src/pages/MachineVision.tsx`, `CameraView`, `ReconstructionView` | Real `getUserMedia` stream, frame-as-texture projection, measured field draped over the board, stills exportable as PNG |
 
 ## Navigation — page by page, never one long scroll
 
-Eight frames in the sidebar (or number keys `1`–`8`):
+Nine frames in the sidebar (or number keys `1`–`9`):
 
-`1` Dashboard · `2` Live Scan · `3` Heatmaps · `4` Analytics · `5` Data Log · `6` Reports · `7` Calibration · `8` Settings
+`1` Dashboard · `2` Live Scan · `3` Heatmaps · `4` Machine Vision · `5` Analytics · `6` Data Log ·
+`7` Reports · `8` Calibration · `9` Settings
+
+**Machine Vision** is the only frame that looks at the hardware instead of the signal: a real camera
+viewfinder (`src/lib/camera.ts` + `src/components/CameraView.tsx`) side by side with a 3D
+reconstruction (`src/lib/scene.ts` + `src/components/ReconstructionView.tsx`) that maps the camera
+frame onto a board plane and drapes the measured field over it. No camera → black viewfinder with the
+reason stated; Demo Mode → a painted `DEMO CAMERA FEED` from `src/lib/demo.ts`, never a real stream.
 
 **Dashboard** is the overview frame: 3D topology surface, reading-quality donut, animated signal
 anomaly deltas, per-column signal profile and capture-activity bars. Every panel is fed by the live
