@@ -297,6 +297,8 @@ export interface AcquisitionLike {
 export interface StabilityStats {
   state: SignalState
   spreadPct: number | null
+  /** Human-readable reason when the verdict needs one (e.g. a zero input). */
+  note?: string
 }
 
 /**
@@ -311,6 +313,9 @@ export function evaluateStability(
   if (base === 'INVALID') return { state: 'INVALID', spreadPct: null }
   if (base === 'SATURATED') return { state: 'SATURATED', spreadPct: null }
   if (values.length < cfg.stabilityMinSamples) return { state: 'UNKNOWN', spreadPct: null }
+  // A flat zero is not a calm signal: the detector is reporting nothing. Calling
+  // that STABLE would put a reassuring badge on a dead input.
+  if (values.every((v) => v === 0)) return { state: 'UNSTABLE', spreadPct: 0, note: 'reading is zero — check the probe wiring' }
 
   const min = Math.min(...values)
   const max = Math.max(...values)

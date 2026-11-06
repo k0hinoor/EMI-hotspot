@@ -443,6 +443,12 @@ export const useApp = create<AppState>()((set, get) => {
           return
         }
       }
+      // Decorative or empty lines from a foreign sketch are not protocol
+      // failures: in ADOPT mode they are counted once and then ignored quietly,
+      // so the log shows the readings instead of a wall of noise.
+      const decorative = /^[-=_*#~.\s]+$/.test(line.trim())
+      if (state.settings.frame_parse_mode === 'ADOPT' && decorative) return
+
       set((s) => ({
         framesRejected: s.framesRejected + 1,
         log: pushLog(s.log, { direction: 'ERR', text: `Rejected: ${message}`, bytes: line.length }),
@@ -596,7 +602,7 @@ export const useApp = create<AppState>()((set, get) => {
       samples,
       windowValues,
       signalState,
-      signalNote: note,
+      signalNote: note ?? stability.note ?? null,
       session: { ...state.session, last_message_at: receivedAt },
       samplesReceived: state.samplesReceived + 1,
       log: pushLog(state.log, {

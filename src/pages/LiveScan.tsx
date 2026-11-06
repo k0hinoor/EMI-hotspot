@@ -95,6 +95,14 @@ export function LiveScan() {
 
   const cfg = settings.acquisition
   const connected = deviceState === 'CONNECTED'
+  // Demo Mode feeds synthetic frames through the real handler, so the stream
+  // controls must reflect that stream rather than a link that does not exist.
+  const demoMode = useApp((s) => s.demoMode)
+  const demoStreaming = useApp((s) => s.demoStreaming)
+  const toggleDemoStream = useApp((s) => s.toggleDemoStream)
+  const streaming = demoMode ? demoStreaming : connected
+  const onStart = demoMode ? toggleDemoStream : startAcquisition
+  const onPause = demoMode ? toggleDemoStream : pauseAcquisition
   const live = stats(windowSeconds)
   const latest = samples.length ? samples[samples.length - 1] : null
   // Trace stability, computed from the raw frames so the number cannot be
@@ -306,15 +314,15 @@ export function LiveScan() {
                 size="sm"
                 variant={acquiring ? 'secondary' : 'primary'}
                 icon={<Play size={10} />}
-                disabled={!connected || acquiring}
-                onClick={startAcquisition}
+                disabled={demoMode ? demoStreaming : !connected || acquiring}
+                onClick={onStart}
               >
                 Start
               </Button>
-              <Button size="sm" icon={<Pause size={10} />} disabled={!connected || !acquiring} onClick={pauseAcquisition}>
+              <Button size="sm" icon={<Pause size={10} />} disabled={demoMode ? !demoStreaming : !connected || !acquiring} onClick={onPause}>
                 Pause
               </Button>
-              <Button size="sm" icon={<Square size={9} />} disabled={!connected} onClick={stopAcquisition}>
+              <Button size="sm" icon={<Square size={9} />} disabled={!streaming} onClick={demoMode ? toggleDemoStream : stopAcquisition}>
                 Stop
               </Button>
               <Button
