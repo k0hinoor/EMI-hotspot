@@ -208,6 +208,27 @@ combined on a common scale.
 
 ---
 
+### Getting the current branch on Windows
+
+`main` is one PR behind. To run the ESP32-CAM features, download **this** branch. A long URL pasted
+into PowerShell gets wrapped with a line break, which silently corrupts it and returns **404 Not Found**
+— build it in parts instead:
+
+```powershell
+$repo   = "k0hinoor/EMI-hotspot"
+$branch = "arena/1bc0f80b-emi-hotspot"
+$url    = "https://github.com/$repo/archive/refs/heads/$branch.zip"
+Invoke-WebRequest $url -OutFile emi.zip
+Expand-Archive emi.zip -DestinationPath . -Force
+cd EMI-hotspot-arena-1bc0f80b-emi-hotspot
+```
+
+Sanity check that you have the right code — this file does not exist on `main`:
+
+```powershell
+Test-Path .\src\lib\esp32cam.ts     # must print True
+```
+
 ### Windows: `npx` / `npm` blocked by PowerShell
 
 If you see `npx.ps1 cannot be loaded because running scripts is disabled on this system`, PowerShell's
