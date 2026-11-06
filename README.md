@@ -267,6 +267,35 @@ Monitor** — it holds the port.
 If your board has no USB-serial chip you need the FTDI adapter: `GND→GND`, `5V→5V`, `U0R→TX`,
 `U0T→RX`, and **`IO0→GND` only while flashing**, then remove it and press RST.
 
+### 0b. Upload fails with "No serial data received"
+
+The sketch compiles and then esptool cannot reach the bootloader:
+
+```
+Connecting......................................
+A fatal error occurred: Failed to connect to ESP32: No serial data received.
+```
+
+That is never a code problem — the board simply is not listening. In order of how
+often it is the cause:
+
+1. **Something else holds the port.** Arduino's Serial Monitor, a `npm run bridge`
+   window, another IDE, PuTTY. A port can only be open once. Close them all; the
+   bridge prints `Bridge open on COM8` when it has the port, so `Ctrl+C` it.
+2. **The board needs a manual boot.** Hold `BOOT` (some boards label it `IO0`),
+   tap `EN`/`RST`, release `BOOT`, then press Upload. Many DevKits cannot
+   auto-reset because they lack the DTR/RTS wiring.
+3. **Wrong or missing USB driver.** On Windows, `Get-CimInstance Win32_SerialPort`
+   must list the adapter. Nothing listed means the cable is charge-only or the
+   driver is absent (CP210x, CH340 and FTDI are all different drivers).
+4. **USB cable or hub.** Charge-only cables carry power and no data. Try another
+   cable and a rear-panel port, not a hub.
+5. **Too fast an upload speed.** Drop `Tools → Upload Speed` to `115200`.
+
+Note that the ESP32-CAM has no USB-serial chip at all: it needs `IO0 → GND` held
+during flashing plus a separate adapter, as described above. A plain ESP32 DevKit
+does not.
+
 ### 1. Prove the firmware talks (no dashboard yet)
 
 ```bash
