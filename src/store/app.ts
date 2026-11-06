@@ -7,6 +7,8 @@ import {
   type Transport,
 } from '../lib/serial'
 import {
+  adoptNumber,
+  adoptStatus,
   evaluateStability,
   makeSample,
   parseFrame,
@@ -58,6 +60,7 @@ import type {
   AppSettings,
   Esp32Frame,
   Esp32LinkState,
+  FrameParseMode,
   FrameCapture,
   CalibrationProfile,
   DeviceRecord,
@@ -229,6 +232,7 @@ interface AppState {
   setGraphPaused: (paused: boolean) => void
   setActiveProbeType: (type: ProbeType) => void
   updateSettings: (patch: Partial<AppSettings>) => void
+  setFrameParseMode: (mode: FrameParseMode) => void
   updateAcquisition: (patch: Partial<AppSettings['acquisition']>) => void
   saveSettings: () => Promise<void>
   createScan: (input: Omit<Scan, 'scan_id' | 'started_at' | 'completed_at' | 'status'>) => Promise<Scan | null>
@@ -415,6 +419,36 @@ export const useApp = create<AppState>()((set, get) => {
       frame = parseFrame(line)
     } catch (err) {
       const message = err instanceof ProtocolError ? err.message : 'Unparseable frame'
+      // A device that speaks its own format can still be tested — but only when
+      // the operator switched adoption on. The reading is flagged and the raw
+      // line is kept, so nothing is passed off as protocol data.
+      if (state.settings.frame_parse_mode === 'ADOPT') {
+        const adopted = adoptNumber(line)
+        if (adopted) {
+          applyDataFrame(
+            {
+              kind: 'DATA',
+              seq: null,
+              signal_raw: adopted.value,
+              signal_filtered: null,
+              sample_count: null,
+              status: adoptStatus(line),
+              probe_type: null,
+              timestamp: null,
+            },
+            line,
+            state,
+            { adoptedLabel: adopted.label },
+          )
+          return
+        }
+      }
+      // Decorative or empty lines from a foreign sketch are not protocol
+      // failures: in ADOPT mode they are counted once and then ignored quietly,
+      // so the log shows the readings instead of a wall of noise.
+      const decorative = /^[-=_*#~.\s]+$/.test(line.trim())
+      if (state.settings.frame_parse_mode === 'ADOPT' && decorative) return
+
       set((s) => ({
         framesRejected: s.framesRejected + 1,
         log: pushLog(s.log, { direction: 'ERR', text: `Rejected: ${message}`, bytes: line.length }),
@@ -522,7 +556,12 @@ export const useApp = create<AppState>()((set, get) => {
     }
   }
 
-  function applyDataFrame(frame: DataFrame, line: string, _stateSnapshot: AppState) {
+  function applyDataFrame(
+    frame: DataFrame,
+    line: string,
+    _stateSnapshot: AppState,
+    options: { adoptedLabel?: string | null } = {},
+  ) {
     const state = get()
     const cfg = state.settings.acquisition
     const limits: AcquisitionLike = {
@@ -563,12 +602,14 @@ export const useApp = create<AppState>()((set, get) => {
       samples,
       windowValues,
       signalState,
-      signalNote: note,
+      signalNote: note ?? stability.note ?? null,
       session: { ...state.session, last_message_at: receivedAt },
       samplesReceived: state.samplesReceived + 1,
       log: pushLog(state.log, {
         direction: 'IN',
-        text: `DATA raw=${frame.signal_raw}${frame.signal_filtered !== null ? ` filtered=${frame.signal_filtered}` : ''} → ${quality}`,
+        text: options.adoptedLabel
+          ? `ADOPTED "${options.adoptedLabel}"=${frame.signal_raw} → ${quality} · raw: ${line.slice(0, 60)}`
+          : `DATA raw=${frame.signal_raw}${frame.signal_filtered !== null ? ` filtered=${frame.signal_filtered}` : ''} → ${quality}`,
         bytes: line.length,
       }),
     })
@@ -853,6 +894,32 @@ export const useApp = create<AppState>()((set, get) => {
     updateSettings(patch) {
       set((s) => ({ settings: { ...s.settings, ...patch } }))
       void storage.set(STORAGE_KEYS.settings, get().settings)
+    },
+
+    /**
+     * Switches how unknown serial lines are treated. ADOPT is the "test this
+     * board as it is" mode: it reads a labelled number out of a foreign sketch,
+     * flags every such reading, and never claims the line was protocol data.
+     */
+    setFrameParseMode(mode) {
+      set((s) => ({
+        settings: { ...s.settings, frame_parse_mode: mode },
+        log: pushLog(s.log, {
+          direction: 'SYS',
+          text:
+            mode === 'ADOPT'
+              ? 'Parser: ADOPT — unrecognised lines are read for a labelled number and flagged.'
+              : 'Parser: STRICT — only protocol lines are accepted.',
+        }),
+      }))
+      void storage.set(STORAGE_KEYS.settings, get().settings)
+      get().notify(
+        mode === 'ADOPT' ? 'warn' : 'ok',
+        mode === 'ADOPT' ? 'Adopting foreign lines' : 'Strict protocol only',
+        mode === 'ADOPT'
+          ? 'Readings taken from a non-protocol line are logged with the raw text. Use only to test a board.'
+          : 'Lines that are not #HELLO/#DATA are rejected again.',
+      )
     },
     updateAcquisition(patch) {
       set((s) => ({ settings: { ...s.settings, acquisition: { ...s.settings.acquisition, ...patch } } }))

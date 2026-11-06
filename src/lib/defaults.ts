@@ -6,6 +6,7 @@ import type { AppSettings, Probe } from './types'
  */
 export const defaultSettings: AppSettings = {
   baud_rate: 115200,
+  frame_parse_mode: 'STRICT',
   acquisition: {
     adc_max: 4095,
     unit: 'ADC counts',

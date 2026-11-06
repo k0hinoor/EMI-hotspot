@@ -21,6 +21,15 @@ export type ScanStatus = 'IDLE' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'FAILED'
 
 export type Transport = 'WEB_SERIAL' | 'WEB_USB' | 'SERIAL_BRIDGE' | 'ESP32_CAM'
 
+/**
+ * How incoming serial text is interpreted.
+ *  - `STRICT`  only this app's own line protocol is accepted (default).
+ *  - `ADOPT`   a line the protocol does not recognise is read for a labelled
+ *              number, and the reading is flagged `ADOPTED_LINE` with the raw
+ *              line kept, so a foreign sketch can be tested honestly.
+ */
+export type FrameParseMode = 'STRICT' | 'ADOPT'
+
 /** How an ESP32-CAM module is pulled off the network (PRD §9.4). */
 export type Esp32StreamMode = 'websocket' | 'mjpeg'
 
@@ -211,6 +220,8 @@ export interface AcquisitionSettings {
 
 export interface AppSettings {
   baud_rate: number
+  /** How unrecognised serial lines are treated (see FrameParseMode). */
+  frame_parse_mode: FrameParseMode
   acquisition: AcquisitionSettings
   /** Show interpolated surface on the heatmap (clearly marked as derived). */
   interpolation: boolean
