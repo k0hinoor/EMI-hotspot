@@ -117,7 +117,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
               {[
                 [
                   'Flash the firmware',
-                  'Upload firmware/emi_hotspot_esp32cam.ino (ESP32-CAM) or firmware/emi_hotspot_serial.ino (Arduino) — one JSON frame per line at 115200 baud.',
+                  'Upload firmware/emi_hotspot_esp32cam/ (ESP32-CAM) or firmware/emi_hotspot_serial/ (Arduino) — one JSON frame per line at 115200 baud.',
                 ],
                 ['Fit the probe', 'Connect the E-field or H-field probe to the detector input and match the probe type on the device.'],
                 ['Open the link', 'Plug the board into this machine, close any serial monitor holding the port, then press Connect and pick it.'],

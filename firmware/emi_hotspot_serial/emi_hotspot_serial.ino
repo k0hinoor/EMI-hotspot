@@ -177,10 +177,10 @@ void setup() {
 #if defined(ARDUINO_ARCH_ESP32)
   // Full 12-bit range and the widest input attenuation, so the detector's
   // envelope is not clipped at the low end of the scale.
+  // (ESP32 has no analogReference() — that is an AVR function. Referencing it
+  // here made the sketch fail to compile on the board it targets.)
   analogReadResolution(12);
   analogSetPinAttenuation(ADC_PIN, ADC_11db);
-#else
-  analogReference(DEFAULT);
 #endif
 
   delay(250);
