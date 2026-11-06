@@ -96,8 +96,15 @@ port.on('error', (error) => {
 port.open((error) => {
   if (error) {
     console.error(`Could not open ${path}: ${error.message}`)
-    if (/BUSY|Resource busy|Permission denied/i.test(error.message)) {
-      console.error('Another program is holding the port — close the Arduino/PyCharm monitor and retry.')
+    if (/BUSY|Resource busy/i.test(error.message)) {
+      console.error('Another program is holding the port — close the Arduino IDE monitor / pio monitor and retry.')
+    } else if (/Permission denied|EACCES/i.test(error.message)) {
+      console.error(
+        'Linux: add yourself to the serial group, then log out and back in:\n' +
+          '  sudo usermod -aG dialout $USER',
+      )
+    } else if (/File not found|ENOENT|cannot find/i.test(error.message)) {
+      console.error('No such port. Run: npm run bridge:list   (Windows ports look like COM5)')
     }
     process.exit(1)
   }
