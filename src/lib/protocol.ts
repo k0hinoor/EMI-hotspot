@@ -55,7 +55,24 @@ export interface ErrFrame {
   message: string
 }
 
-export type Frame = HelloFrame | ProbeFrame | DataFrame | InfoFrame | PingFrame | ErrFrame
+/**
+ * A value lifted out of a device that speaks its own line format (a sensor
+ * sketch, a vendor tool) instead of this protocol. The line that produced it is
+ * kept verbatim so the operator can audit the mapping.
+ */
+export interface AdoptedFrame {
+  kind: 'ADOPTED'
+  /** Numeric value read out of the vendor line. */
+  signal_raw: number
+  /** Which text label the number was taken from, if any. */
+  label: string | null
+  /** Free-form status word found on the line, if any. */
+  status: string | null
+  /** The line exactly as received. */
+  raw: string
+}
+
+export type Frame = HelloFrame | ProbeFrame | DataFrame | InfoFrame | PingFrame | ErrFrame | AdoptedFrame
 
 export class ProtocolError extends Error {
   readonly raw: string
@@ -189,6 +206,38 @@ export function splitLines(buffer: string, chunk: string): { lines: string[]; re
   const parts = combined.split('\n')
   const rest = parts.pop() ?? ''
   return { lines: parts.map((p) => p.trim()).filter(Boolean), rest }
+}
+
+/**
+ * Pulls a number out of a line that is not protocol-shaped.
+ *
+ * Only explicit `key: value` / `key=value` pairs or labelled numbers are taken —
+ * never the first bare integer in the line, which would happily match a version
+ * string or a timestamp. Returns null when the line carries no usable value.
+ */
+export function adoptNumber(line: string): { value: number; label: string | null } | null {
+  const text = line.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').trim()
+  if (!text) return null
+
+  // `Label: 123` / `Label = 123` / `"label":123`
+  const pairs = [...text.matchAll(/([A-Za-z][A-Za-z0-9 _./%-]{1,24})\s*[:=]\s*(-?\d+(?:\.\d+)?)/g)]
+  const words = pairs.filter((m) => !/^(version|ver|v|id|seq|baud|fps|rate|date|time|ts|port)$/i.test(m[1].trim()))
+  if (words.length > 0) {
+    const pick = words[0]
+    return { value: Number(pick[2]), label: pick[1].trim() }
+  }
+
+  // `1234 ppm` / `1234 units`
+  const unitNumber = /(-?\d+(?:\.\d+)?)\s*(ppm|ppb|mv|db|dbm|a|ma|v|units?|cnts?|raw)\b/i.exec(text)
+  if (unitNumber) return { value: Number(unitNumber[1]), label: unitNumber[2] }
+
+  return null
+}
+
+/** Status vocabulary a vendor line might use, mapped onto this app's verdicts. */
+export function adoptStatus(line: string): string | null {
+  const found = /\b(VALID|OK|GOOD|NORMAL|UNSTABLE|NOISY|WARN(?:ING)?|SATURATED|CLIPPED|OVERLOAD|INVALID|ERROR|FAULT|CRITICAL)\b/i.exec(line)
+  return found ? found[1].toUpperCase() : null
 }
 
 export function classifyStatus(status: string | null): QualityStatus | null {

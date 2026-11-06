@@ -26,6 +26,7 @@ import {
   KeyValue,
   Notice,
   NumberInput,
+  Segmented,
   Select,
   Switch,
   TextInput,
@@ -40,6 +41,7 @@ export function Settings() {
     settings,
     updateSettings,
     updateAcquisition,
+    setFrameParseMode,
     saveSettings,
     webSerialSupported,
     bridgeSupported,
@@ -149,6 +151,27 @@ export function Settings() {
         <Frame className="shrink-0">
           <FrameHeader title="Acquisition" subtitle="rules that decide a valid reading" icon={<SlidersHorizontal size={12} />} />
           <div className="p-2.5">
+            <div className="mb-2 rounded-[7px] border border-white/[0.07] bg-white/[0.02] px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[10.5px] font-medium text-ink">Line parser</div>
+                  <p className="mt-0.5 text-[9.5px] leading-snug text-ink-dim">
+                    {settings.frame_parse_mode === 'ADOPT'
+                      ? 'Adopting: unknown lines are read for a labelled number and flagged with their raw text. For testing a board as it is.'
+                      : 'Strict: only #HELLO / #DATA protocol lines are accepted. Everything else is rejected.'}
+                  </p>
+                </div>
+                <Segmented
+                  size="xs"
+                  value={settings.frame_parse_mode}
+                  onChange={(v) => setFrameParseMode(v)}
+                  options={[
+                    { value: 'STRICT', label: 'Strict' },
+                    { value: 'ADOPT', label: 'Adopt' },
+                  ]}
+                />
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               <Field label="ADC full scale" hint="outside 0…max is rejected">
                 <NumberInput

@@ -286,6 +286,19 @@ You should see, once per ~0.5 s:
 
 Exit that terminal before opening the dashboard — one program per port.
 
+### 1b. If the board already runs a different sketch
+
+A module that still has a sensor sketch on it (e.g. `Air Quality Value: 0 / Status: NORMAL`) does not
+speak this protocol, so a strict parser rejects every line. Two ways forward:
+
+- **Test the board as it is.** Settings → **Line parser → Adopt**. A line the protocol does not
+  recognise is read for a labelled number (`Air Quality Value: 342`), and every such reading is logged
+  as `ADOPTED "Air Quality Value"=342 → VALID · raw: …`. Nothing is presented as protocol data, and
+  the mode is a visible setting, not a silent fallback. It exists to prove the link end to end before
+  you change firmware — not for taking measurements.
+- **Flash this project's firmware** (`firmware/emi_hotspot_esp32cam.ino`) so the board reports the
+  detector and the camera in one protocol. This is what the numbers in the app are designed around.
+
 ### 2. Connect the dashboard over USB
 
 ```bash
