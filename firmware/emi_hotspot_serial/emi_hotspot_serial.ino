@@ -21,8 +21,18 @@ const char *FIRMWARE_VERSION = "1.0.0";
 const int PROTOCOL_VERSION = 1;
 
 #define ADC_PIN A0
-static const uint16_t ADC_MAX = 1023;      // 10-bit boards; use 4095 on 12-bit
-static const uint16_t SATURATION = 1015;   // near full scale = saturated
+
+// The ADC width is a property of the board, not a constant. An ESP32 reads
+// 0..4095 with the 11 dB attenuation; an AVR reads 0..1023. Reporting ESP32
+// counts against a 10-bit full scale marks almost every real reading as
+// SATURATED, which is a silent lie about the signal.
+#if defined(ARDUINO_ARCH_ESP32)
+static const uint16_t ADC_MAX = 4095;
+#else
+static const uint16_t ADC_MAX = 1023;
+#endif
+
+static const uint16_t SATURATION = (uint16_t)(ADC_MAX * 0.99);  // near full scale
 static const uint16_t SAMPLE_RATE_HZ = 20;
 static const uint16_t AVG_WINDOW = 32;
 
@@ -163,7 +173,16 @@ static void handleCommand(String line) {
 
 void setup() {
   Serial.begin(115200);
-  analogReference(DEFAULT);
+
+#if defined(ARDUINO_ARCH_ESP32)
+  // Full 12-bit range and the widest input attenuation, so the detector's
+  // envelope is not clipped at the low end of the scale.
+  // (ESP32 has no analogReference() — that is an AVR function. Referencing it
+  // here made the sketch fail to compile on the board it targets.)
+  analogReadResolution(12);
+  analogSetPinAttenuation(ADC_PIN, ADC_11db);
+#endif
+
   delay(250);
   hello();
   probeFrame();

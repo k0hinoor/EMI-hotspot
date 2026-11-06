@@ -33,7 +33,7 @@ statistics, log and reports exercise exactly the code paths the hardware uses.
 The ESP32-CAM is the machine-vision source: it sees the board **and** reads the detector, then ships
 both over one WebSocket so the dashboard never has to guess what was true when a frame was captured.
 
-**Firmware** — [`firmware/emi_hotspot_esp32cam.ino`](./firmware/emi_hotspot_esp32cam.ino) (AI-Thinker
+**Firmware** — [`firmware/emi_hotspot_esp32cam/emi_hotspot_esp32cam.ino`](./firmware/emi_hotspot_esp32cam/emi_hotspot_esp32cam.ino) (AI-Thinker
 ESP32-CAM, OV2640). Per frame it sends a meta line then the JPEG:
 
 ```
@@ -116,7 +116,7 @@ see *Desktop packaging* below.
 
 ## Connect the hardware
 
-1. **Flash the firmware.** [`firmware/emi_hotspot_serial.ino`](./firmware/emi_hotspot_serial.ino)
+1. **Flash the firmware.** [`firmware/emi_hotspot_serial/emi_hotspot_serial.ino`](./firmware/emi_hotspot_serial/emi_hotspot_serial.ino)
    is a reference sketch for an Arduino-class board. Detector output → `A0`, USB → the laptop.
 2. **Fit a probe.** E-field monopole or H-field loop on the shared detector input, and set the
    probe type on the device (or via `#PROBE`).
@@ -194,7 +194,9 @@ src/
   store/app.ts    application state, capture pipeline, persistence
   components/     sidebar shell, glass cards, charts, heatmap + topology canvases, dialogs
   pages/          the seven navigation sections
-firmware/         reference detector sketch
+firmware/
+  emi_hotspot_serial/emi_hotspot_serial.ino    reference detector sketch (any board)
+  emi_hotspot_esp32cam/emi_hotspot_esp32cam.ino  ESP32-CAM sensor head
 ```
 
 State and records persist locally in IndexedDB. `Settings → Data & storage` exports a full JSON
@@ -258,7 +260,7 @@ it needs no Wi-Fi and proves the detector side; then test the **camera** path.
 ### 0. Flash the sketch
 
 Arduino IDE → board **AI Thinker ESP32-CAM**, 115200 baud, open
-`firmware/emi_hotspot_esp32cam.ino`. Put your Wi-Fi credentials in `WIFI_SSID` / `WIFI_PASSWORD`
+`firmware/emi_hotspot_esp32cam/emi_hotspot_esp32cam.ino`. Put your Wi-Fi credentials in `WIFI_SSID` / `WIFI_PASSWORD`
 (leave empty to start the `EMI-HOTSPOT-CAM` access point instead). Flash, then **close the Serial
 Monitor** — it holds the port.
 
@@ -296,7 +298,7 @@ speak this protocol, so a strict parser rejects every line. Two ways forward:
   as `ADOPTED "Air Quality Value"=342 → VALID · raw: …`. Nothing is presented as protocol data, and
   the mode is a visible setting, not a silent fallback. It exists to prove the link end to end before
   you change firmware — not for taking measurements.
-- **Flash this project's firmware** (`firmware/emi_hotspot_esp32cam.ino`) so the board reports the
+- **Flash this project's firmware** (`firmware/emi_hotspot_esp32cam/emi_hotspot_esp32cam.ino`) so the board reports the
   detector and the camera in one protocol. This is what the numbers in the app are designed around.
 
 ### 2. Connect the dashboard over USB

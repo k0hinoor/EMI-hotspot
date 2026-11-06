@@ -138,7 +138,7 @@ export function LiveScan() {
           {deviceState === 'ERROR' ? <Badge tone="danger">LINK ERROR</Badge> : null}
           <span className="min-w-0 flex-1 truncate text-[10.5px] text-ink-dim">
             Readings stay blank until the board streams frames over USB serial. Flash{' '}
-            <span className="font-mono text-ink-muted">firmware/emi_hotspot_serial.ino</span>, plug it in, then open the
+            <span className="font-mono text-ink-muted">firmware/emi_hotspot_serial/</span>, plug it in, then open the
             link.
           </span>
           <Button variant="primary" size="md" icon={<Plug size={12} />} onClick={() => setConnectOpen(true)}>
