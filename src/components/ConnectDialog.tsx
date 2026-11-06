@@ -115,9 +115,12 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
           {!connected ? (
             <ol className="grid gap-1.5 rounded-[10px] border border-white/[0.07] bg-black/30 px-3 py-2.5">
               {[
-                ['Flash the firmware', 'Upload firmware/emi_hotspot_serial.ino — it streams one JSON frame per line at 115200 baud.'],
+                [
+                  'Flash the firmware',
+                  'Upload firmware/emi_hotspot_esp32cam.ino (ESP32-CAM) or firmware/emi_hotspot_serial.ino (Arduino) — one JSON frame per line at 115200 baud.',
+                ],
                 ['Fit the probe', 'Connect the E-field or H-field probe to the detector input and match the probe type on the device.'],
-                ['Open the link', 'Plug the board into this machine, then press Connect and pick the port.'],
+                ['Open the link', 'Plug the board into this machine, close any serial monitor holding the port, then press Connect and pick it.'],
               ].map(([title, body], i) => (
                 <li key={title} className="flex gap-2.5">
                   <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-line font-mono text-[9px] text-ink-dim">
