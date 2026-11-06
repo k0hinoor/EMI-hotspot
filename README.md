@@ -217,8 +217,11 @@ execution policy is blocking npm's `.ps1` shims. Three ways out, easiest first:
    folder. `npm` and `npx` work there because they run as `.cmd`.
 2. **Allow local scripts for your user** (persistent, one command, in PowerShell):
    ```powershell
-   Set-ExecutionPolicy -Scope CurrentUser -RemoteSigned
+   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
    ```
+   Write `-ExecutionPolicy` explicitly. A typo (`-RemoteSigned`, `-RemoteSign`) fails with
+   `A parameter cannot be found that matches parameter name 'RemoteSigned'` — the policy *value* is
+   not a parameter name, and setx/powercfg-style abbreviations do not work here.
 3. **Bypass for a single command:**
    ```powershell
    powershell -ExecutionPolicy Bypass -Command "npm run dev"
