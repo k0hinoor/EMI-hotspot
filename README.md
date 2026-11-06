@@ -205,3 +205,100 @@ archive, and the same page can clear records with confirmation.
 Not a compliance instrument, not a calibrated field-strength meter, not a spectrum analyzer.
 Manual probe positioning governs spatial accuracy, and E-field and H-field readings are never
 combined on a common scale.
+
+---
+
+## End-to-end test with the module on the bench
+
+You have two independent paths from the ESP32-CAM to the dashboard. Test the **serial** one first —
+it needs no Wi-Fi and proves the detector side; then test the **camera** path.
+
+### 0. Flash the sketch
+
+Arduino IDE → board **AI Thinker ESP32-CAM**, 115200 baud, open
+`firmware/emi_hotspot_esp32cam.ino`. Put your Wi-Fi credentials in `WIFI_SSID` / `WIFI_PASSWORD`
+(leave empty to start the `EMI-HOTSPOT-CAM` access point instead). Flash, then **close the Serial
+Monitor** — it holds the port.
+
+If your board has no USB-serial chip you need the FTDI adapter: `GND→GND`, `5V→5V`, `U0R→TX`,
+`U0T→RX`, and **`IO0→GND` only while flashing**, then remove it and press RST.
+
+### 1. Prove the firmware talks (no dashboard yet)
+
+```bash
+npx @serialport/list                 # or: npm run bridge:list
+npx @serialport/terminal -p /dev/ttyUSB0 -b 115200   # Windows: COM5
+```
+
+You should see, once per ~0.5 s:
+
+```
+#HELLO {"device_id":"EMI-CAM-01","firmware_version":"esp32cam-1.1.0",...,"transport":"ESP32_CAM"}
+#INFO {"sample_rate_hz":200,...,"camera":"OV2640","psram":true}
+#DATA {"seq":12,"signal_raw":1180,"signal_filtered":1152,"sample_count":32,"status":"VALID","probe_type":"E_FIELD"}
+```
+
+Exit that terminal before opening the dashboard — one program per port.
+
+### 2. Connect the dashboard over USB
+
+```bash
+npm run dev            # http://localhost:5173  (Web Serial needs a secure origin: localhost is fine)
+```
+
+Topbar **Connect** → the browser's port picker appears → choose the ESP32 → **Connect**.
+Success looks like: `CONNECTED` badge, `EMI-CAM-01` in the sidebar, frame counter climbing,
+Live Scan (`2`) drawing a trace, and `#DATA` lines in Settings → Link log.
+
+> If the picker lists nothing, another program still holds the port; close it (Arduino IDE, `pio
+> device monitor`, the terminal above).
+
+### 3. If Web Serial is unavailable or the port is busy
+
+```bash
+npm install --no-save serialport
+npm run bridge -- --port /dev/ttyUSB0      # Windows: --port COM5
+```
+
+Then in the **browser console on the dashboard**:
+
+```js
+new EventSource('http://localhost:8787/events').onmessage = (e) =>
+  document.dispatchEvent(new CustomEvent('emi-bridge-line', { detail: e.data }))
+```
+
+### 4. Test the camera path (this is what the module is for)
+
+1. Note the IP the sketch printed (`#INFO ip 192.168.x.x`).
+2. Open **Machine Vision** (`4`) → click the address chip in the footer → enter host + port `81`,
+   transport **WebSocket**, path `/stream` → **Connect module**.
+3. Expect: `ESP32 LIVE` badge, a JPEG viewfinder, `frame #seq` climbing, measured fps (real ESP32-CAM
+   at VGA typically 8–15 fps), frame size in kB, and arrival p95 jitter in the Module panel.
+4. The right-hand **3D reconstruction** uses that frame as the board texture; an overlay of measured
+   cells drapes on top once you have captured readings.
+
+If it stays on `CONNECTING`, or flips to `LINK ERROR`, the message names the cause: wrong host, port
+81 closed, or the sketch not running the WebSocket server.
+
+**HTTPS caveat:** a page served over `https://` cannot open `ws://192.168.x.x`. Use
+`http://localhost:5173` or the LAN address over plain `http` for the camera link.
+
+### 5. Full end-to-end pass (both directions at once)
+
+1. USB connected (step 2) **and** module connected (step 4) at the same time.
+2. Heatmaps (`3`) → **New** scan → 60 × 40 mm, 4 mm spacing, E-field probe.
+3. At each cell put the probe on the board, click the cell, **Capture measurement**. The module frame
+   keeps streaming while you do it.
+4. Dashboard (`1`) → the 3D topology, donut and activity bars fill from those captures only.
+5. Reports (`6`) → export the PDF; it must show the real coverage percentage and the unit notice.
+
+### What "working" looks like, in numbers
+
+| Signal | Healthy | What it means if not |
+|--------|---------|----------------------|
+| `#DATA` stream | ~2 lines/s on serial | Firmware not running, or wrong baud (115200) |
+| Frame counter | rising every second | Port open but no frames → check Link log for rejects |
+| Module fps | 8–15 at VGA | `<4` → Wi-Fi weak; try QVGA in `http://<ip>/config?size=QVGA` |
+| Arrival jitter p95 | < 400 ms | Spikes mean the module is retrying Wi-Fi |
+| Trace stability | < 5 % at rest | Higher → detector on GPIO13/ADC2; move to GPIO2 or 15 |
+| Peak value | changes with probe position | Flat trace → probe not coupled, or A0 not connected |

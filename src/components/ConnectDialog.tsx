@@ -183,7 +183,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
                     <Plug size={13} />
                   )
                 }
-                disabled={!supported || deviceState === 'CONNECTING' || !selectedPortId}
+                disabled={!supported || deviceState === 'CONNECTING' || (bridgeSupported && !webSerialSupported && !selectedPortId)}
                 onClick={() => void connect()}
               >
                 {deviceState === 'CONNECTING' ? 'Opening port…' : 'Connect'}
@@ -191,7 +191,9 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
             )}
             {!connected && webSerialSupported ? (
               <span className="self-center text-[10.5px] text-ink-dim">
-                The browser will ask you to pick a port — that permission is the connection.
+                {ports.length === 0
+                  ? 'No port authorised yet — press Connect and pick your ESP32.'
+                  : 'The browser will ask you to pick a port — that permission is the connection.'}
               </span>
             ) : null}
           </div>
