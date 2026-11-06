@@ -268,9 +268,13 @@ If your board has no USB-serial chip you need the FTDI adapter: `GND→GND`, `5V
 ### 1. Prove the firmware talks (no dashboard yet)
 
 ```bash
-npx @serialport/list                 # or: npm run bridge:list
-npx @serialport/terminal -p /dev/ttyUSB0 -b 115200   # Windows: COM5
+npm run bridge:list                       # find the port (Windows: COM8, Linux: /dev/ttyUSB0)
+npm run bridge -- --port COM8             # Windows
+npm run bridge -- --port /dev/ttyUSB0     # Linux / macOS
 ```
+
+(The `bridge` script needs `npm install --no-save serialport` once. On Windows, `npx` may be blocked by
+the PowerShell policy — the local script avoids that.)
 
 You should see, once per ~0.5 s:
 

@@ -62,11 +62,12 @@ if (args.includes('--list')) {
   process.exit(0)
 }
 
-const path = flag('port', process.env.EMI_PORT ?? '')
+const positional = args.find((a) => !a.startsWith('--') && !/^\d+$/.test(a))
+const path = flag('port', process.env.EMI_PORT ?? positional ?? '')
 const baudRate = Number(flag('baud', '115200'))
 const httpPort = Number(flag('http', '8787'))
 if (!path) {
-  console.error('No port given. Use --port /dev/ttyUSB0 (or --list to see what is attached).')
+  console.error('No port given. Windows: --port COM8 · Linux/macOS: --port /dev/ttyUSB0 · list: --list')
   process.exit(1)
 }
 
