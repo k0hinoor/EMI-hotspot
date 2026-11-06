@@ -208,6 +208,24 @@ combined on a common scale.
 
 ---
 
+### Windows: `npx` / `npm` blocked by PowerShell
+
+If you see `npx.ps1 cannot be loaded because running scripts is disabled on this system`, PowerShell's
+execution policy is blocking npm's `.ps1` shims. Three ways out, easiest first:
+
+1. **Use Command Prompt instead** (no settings changed). Start menu → type `cmd` → `cd` to the project
+   folder. `npm` and `npx` work there because they run as `.cmd`.
+2. **Allow local scripts for your user** (persistent, one command, in PowerShell):
+   ```powershell
+   Set-ExecutionPolicy -Scope CurrentUser -RemoteSigned
+   ```
+3. **Bypass for a single command:**
+   ```powershell
+   powershell -ExecutionPolicy Bypass -Command "npm run dev"
+   ```
+
+In PowerShell you can also call the shim explicitly: `npm.cmd install`, `npx.cmd @serialport/list`.
+
 ## End-to-end test with the module on the bench
 
 You have two independent paths from the ESP32-CAM to the dashboard. Test the **serial** one first —
