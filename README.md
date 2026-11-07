@@ -330,6 +330,27 @@ speak this protocol, so a strict parser rejects every line. Two ways forward:
 - **Flash this project's firmware** (`firmware/emi_hotspot_esp32cam/emi_hotspot_esp32cam.ino`) so the board reports the
   detector and the camera in one protocol. This is what the numbers in the app are designed around.
 
+### 1c. The port list is empty and the dialog says "not chosen yet"
+
+That is how Web Serial works, not a missing driver. A page may only *see* a serial
+port after the user has granted it one, so the list is empty until a chooser has
+run once in that browser profile, on that origin:
+
+1. Press **Connect**. `navigator.serial.requestPort()` opens the browser's own
+   port chooser — that is the permission step, and it must be triggered by the
+   click.
+2. Pick the board's port (`Silicon Labs CP210x (USB to UART Bridge) (COM8)`).
+3. The same port then appears in the dropdown on later visits, for
+   `http://localhost:<port>` on that browser.
+
+If the chooser itself does not open, or the port is not in it:
+
+- the browser is not Chromium-based (Firefox and Safari have no Web Serial);
+- the page is not `localhost` or `https://` — plain `http://192.168.x.x` is not a
+  secure context, so the API is hidden;
+- another program holds the port (Arduino Serial Monitor, `npm run bridge`);
+- the cable is charge-only, so Windows never enumerated a COM port.
+
 ### 2. Connect the dashboard over USB
 
 ```bash

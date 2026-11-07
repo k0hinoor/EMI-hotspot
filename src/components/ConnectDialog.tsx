@@ -145,7 +145,13 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
                   className="flex-1"
                 >
                   {ports.length === 0 ? (
-                    <option value="">{portsLoading ? 'Scanning…' : 'No authorised port'}</option>
+                    <option value="">
+                      {portsLoading
+                        ? 'Scanning…'
+                        : webSerialSupported
+                          ? 'Not chosen yet — press Connect'
+                          : 'No port available'}
+                    </option>
                   ) : (
                     ports.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -195,7 +201,7 @@ export function ConnectDialog({ open, onClose }: { open: boolean; onClose: () =>
             {!connected && webSerialSupported ? (
               <span className="self-center text-[10.5px] text-ink-dim">
                 {ports.length === 0
-                  ? 'No port authorised yet — press Connect and pick your ESP32.'
+                  ? 'The list stays empty until you choose a port — the browser asks on Connect.'
                   : 'The browser will ask you to pick a port — that permission is the connection.'}
               </span>
             ) : null}
