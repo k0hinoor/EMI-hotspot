@@ -33,6 +33,9 @@ import {
   summariseScan,
 } from '../lib/derive'
 
+/** Below this baseline a before/after ratio amplifies noise instead of reporting it. */
+const DELTA_FLOOR = 25
+
 export function Dashboard() {
   const {
     samples,
@@ -99,7 +102,9 @@ export function Dashboard() {
     const half = Math.floor(wave.length / 2)
     const first = wave.slice(0, half).reduce((a, b) => a + b, 0) / half
     const second = wave.slice(half).reduce((a, b) => a + b, 0) / (wave.length - half)
-    if (first === 0) return null
+    // A ratio against a near-zero baseline is arithmetic, not measurement: an
+    // idle input produced "-100.0% signal falling" out of a few ADC counts.
+    if (first < DELTA_FLOOR) return null
     return ((second - first) / first) * 100
   }, [wave])
 
@@ -196,7 +201,7 @@ export function Dashboard() {
             </div>
             <div className="mt-1 flex items-center gap-1 text-[10px] text-ink-dim">
               {delta === null ? (
-                'awaiting frames'
+                wave.length < 12 ? 'awaiting frames' : 'baseline too low for a ratio'
               ) : delta >= 0 ? (
                 <>
                   <TrendingUp size={10} className="text-teal" /> signal rising
@@ -211,7 +216,17 @@ export function Dashboard() {
           <Divider />
           <div className="space-y-0.5">
             <KeyValue label="Peak · 60 s" value={`${formatNumber(live.window.max)} ${cfg.unit}`} mono />
-            <KeyValue label="Spread" value={live.window.spreadPct !== null ? `${formatNumber(live.window.spreadPct, 1)}%` : '—'} mono />
+            <KeyValue
+              label="Spread"
+              value={
+                live.window.spreadPct !== null
+                  ? `${formatNumber(live.window.spreadPct, 1)}%`
+                  : live.window.peakToPeak !== null
+                    ? `${formatNumber(live.window.peakToPeak)} ${cfg.unit} p-p`
+                    : '—'
+              }
+              mono
+            />
             <KeyValue label="Verdict" value={signalState === 'UNKNOWN' ? (connected ? 'waiting' : 'no device') : signalState} />
           </div>
         </div>

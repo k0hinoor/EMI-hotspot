@@ -9,7 +9,16 @@ export interface WindowStats {
   mean: number | null
   peakToPeak: number | null
   spreadPct: number | null
+  /**
+   * True when the mean is too small for a ratio to mean anything. Dividing by a
+   * mean of ~0 turns a handful of ADC counts into "1,316% spread", which reads as
+   * a violent signal when the input is simply idle.
+   */
+  ratioUndefined?: boolean
 }
+
+/** Below this mean, percentages are noise amplification rather than information. */
+export const RATIO_FLOOR = 25
 
 export function stats(values: number[]): WindowStats {
   if (values.length === 0) {
@@ -30,7 +39,8 @@ export function stats(values: number[]): WindowStats {
     max,
     mean,
     peakToPeak: max - min,
-    spreadPct: mean > 0 ? ((max - min) / mean) * 100 : null,
+    spreadPct: mean >= RATIO_FLOOR ? ((max - min) / mean) * 100 : null,
+    ratioUndefined: mean < RATIO_FLOOR,
   }
 }
 

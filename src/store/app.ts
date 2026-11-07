@@ -55,7 +55,7 @@ import {
   type Esp32Config,
 } from '../lib/esp32cam'
 import { storage } from '../lib/storage'
-import { uid } from '../lib/derive'
+import { RATIO_FLOOR, uid } from '../lib/derive'
 import type {
   AppSettings,
   Esp32Frame,
@@ -105,7 +105,10 @@ export interface MeasurementStats {
     min: number | null
     max: number | null
     mean: number | null
+    peakToPeak: number | null
     spreadPct: number | null
+    /** Mean is too small for a ratio — see RATIO_FLOOR in derive.ts. */
+    ratioUndefined?: boolean
   }
   baseline: number | null
   baselineSamples: number
@@ -1546,7 +1549,13 @@ export const useApp = create<AppState>()((set, get) => {
           min,
           max,
           mean,
-          spreadPct: mean && mean > 0 && min !== null && max !== null ? ((max - min) / mean) * 100 : null,
+          peakToPeak: min !== null && max !== null ? max - min : null,
+          // A ratio against a mean of ~0 is noise amplification: on an idle input
+          // it reported "1,316.7% spread", which reads as a violent signal.
+          spreadPct: mean !== null && mean >= RATIO_FLOOR && min !== null && max !== null
+            ? ((max - min) / mean) * 100
+            : null,
+          ratioUndefined: mean !== null && mean < RATIO_FLOOR,
         },
         baseline,
         baselineSamples,
